@@ -49,6 +49,8 @@ const NAMES: IconName[] = [
   "printer",
   "file-text",
   "ruler",
+  "github",
+  "arrow-up-right",
 ];
 
 describe("Icon", () => {

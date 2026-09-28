@@ -8,6 +8,8 @@ import PreferenceField from "./PreferenceField";
 import StorageSettings from "./StorageSettings";
 import { SidebarTrigger } from "./ui/sidebar";
 
+export const REPOSITORY_URL = "https://github.com/imabdulazeez/emdy.md";
+
 export default function SettingsPage() {
   const mac = isMacPlatform();
   let backButton: HTMLButtonElement | undefined;
@@ -60,6 +62,29 @@ export default function SettingsPage() {
               Storage
             </h2>
             <StorageSettings />
+          </section>
+          <section aria-labelledby="settings-about" class="flex flex-col gap-1">
+            <h2 id="settings-about" class="mb-1 text-[12px] text-text-faint">
+              About
+            </h2>
+            <a
+              href={REPOSITORY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Source code on GitHub"
+              class="group -mx-2 flex min-h-11 items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-150 hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              <Icon name="github" size={16} class="shrink-0 text-text-muted" />
+              <span class="text-text">Read the code</span>
+              <span class="ml-auto truncate text-text-faint">
+                {REPOSITORY_URL.replace("https://github.com/", "")}
+              </span>
+              <Icon
+                name="arrow-up-right"
+                size={14}
+                class="shrink-0 text-text-faint transition-colors duration-150 group-hover:text-text"
+              />
+            </a>
           </section>
         </div>
       </div>

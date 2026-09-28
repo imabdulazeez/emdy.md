@@ -11,7 +11,7 @@ import { resetLibraryState, startLibrary, useLibraryDirectory } from "~/state/li
 import { openSettings, resetNavigationState, view } from "~/state/navigation";
 import { resetThemeState, themePreference } from "~/state/theme";
 import { resetUiState, setSidebarOpen, sidebarOpen } from "~/state/ui";
-import SettingsPage from "./SettingsPage";
+import SettingsPage, { REPOSITORY_URL } from "./SettingsPage";
 import { SidebarProvider } from "./ui/sidebar";
 
 let restore: (() => void) | undefined;
@@ -80,5 +80,15 @@ describe("SettingsPage", () => {
     await user.click(back);
     expect(view()).toBe("document");
     expect(window.location.hash).toMatch(/^#\/d\//);
+  });
+
+  it("links to the source repository in a new tab", () => {
+    mount();
+    const about = screen.getByRole("region", { name: "About" });
+    const link = within(about).getByRole("link", { name: "Source code on GitHub" });
+    expect(link).toHaveTextContent("imabdulazeez/emdy.md");
+    expect(link).toHaveAttribute("href", REPOSITORY_URL);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 });
