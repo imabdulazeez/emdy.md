@@ -1,0 +1,404 @@
+@import "tailwindcss";
+
+@theme {
+  /* Every face is a system font, so nothing is downloaded and the browser falls
+     back per character for any script or emoji. Each stack lists the best native
+     face on Apple, Windows, Android, and Linux in turn. The document face follows
+     the "Document font" preference through data-font on <html>. */
+  --font-ui:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-prose: var(--font-ui);
+  --font-mono:
+    ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, "Roboto Mono", "Liberation Mono",
+    "Courier New", monospace;
+
+  /* Palette roles. Every colour in the UI comes from one of these tokens, so a
+     component never carries a hex value or an ad-hoc colour-mix. Dark mode swaps
+     the values below under [data-theme="dark"]; the roles stay the same.
+
+     Surfaces   canvas -> surface -> surface-raised   (back to front)
+     Lines      border, border-strong
+     Text       text, text-muted, text-faint          (loud to quiet)
+     Ink        accent, accent-soft, accent-fg        (the one brand colour)
+     Danger     danger, danger-soft                   (destructive actions only)
+     States     hover, hover-strong, selection, scrim (interaction overlays) */
+
+  --color-canvas: #e9e8e3;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f2f2ef;
+  --color-border: #dddcd6;
+  --color-border-strong: #bab9b1;
+  --color-text: #1b1b19;
+  --color-text-muted: #6b6b66;
+  --color-text-faint: #9b9b94;
+  --color-accent: #2d4bd1;
+  --color-accent-soft: #e6eafc;
+  --color-accent-fg: #ffffff;
+  --color-danger: #b8322f;
+  --color-danger-soft: #fbe7e5;
+  --color-selection: #d8dffa;
+  --color-hover: color-mix(in srgb, var(--color-text) 6%, transparent);
+  --color-hover-strong: color-mix(in srgb, var(--color-text) 10%, transparent);
+  --color-scrim: color-mix(in srgb, var(--color-canvas) 60%, transparent);
+  --color-glass: color-mix(in srgb, var(--color-surface) 88%, transparent);
+
+  /* Document icon inks: the only place colour carries identity rather than
+     state. Each tints a monogram tile or a Lucide glyph in the sidebar. */
+  --color-icon-gray: #74746e;
+  --color-icon-red: #c2413b;
+  --color-icon-orange: #c25e1a;
+  --color-icon-amber: #a07410;
+  --color-icon-green: #3d8a4e;
+  --color-icon-teal: #1d817c;
+  --color-icon-sky: #2a7bb3;
+  --color-icon-blue: #2d4bd1;
+  --color-icon-violet: #7048c8;
+  --color-icon-pink: #bf3d7d;
+
+  --color-syntax-heading: #1b1b19;
+  --color-syntax-marker: #b0b0a8;
+  --color-syntax-link: #2d4bd1;
+  --color-syntax-url: #8f8f88;
+  --color-syntax-code: #4f4f4a;
+  --color-syntax-code-bg: #f2f2ef;
+  --color-syntax-quote: #626260;
+  --color-syntax-keyword: #8a3fa8;
+  --color-syntax-string: #2e7d5b;
+  --color-syntax-number: #b3501c;
+  --color-syntax-comment: #9a9a92;
+  --color-syntax-function: #2b63a8;
+  --color-syntax-type: #8a6a20;
+
+  --text-prose: 17px;
+  --leading-prose: 1.65;
+
+  --radius-sheet: 12px;
+
+  /* Elevation: lift for small pressed segments, sheet for the document, pop for menus. */
+  --shadow-lift: 0 1px 2px rgba(20, 20, 18, 0.08), inset 0 0 0 1px var(--color-border);
+  --shadow-sheet: 0 1px 2px rgba(20, 20, 18, 0.04), 0 8px 24px -12px rgba(20, 20, 18, 0.12);
+  --shadow-pop: 0 1px 2px rgba(20, 20, 18, 0.06), 0 16px 40px -16px rgba(20, 20, 18, 0.28);
+
+  --ease-out-quick: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-font="serif"] {
+  --font-prose:
+    Charter, "Iowan Old Style", Cambria, Georgia, "Noto Serif", "Liberation Serif",
+    "Times New Roman", serif;
+}
+
+:root[data-font="mono"] {
+  --font-prose: var(--font-mono);
+}
+
+:root[data-font="handwriting"] {
+  --font-prose:
+    "Segoe Print", "Bradley Hand", Noteworthy, "Ink Free", "Coming Soon", "Comic Sans MS", casual,
+    cursive;
+}
+
+[data-theme="dark"] {
+  --color-canvas: #121213;
+  --color-surface: #1b1b1d;
+  --color-surface-raised: #262628;
+  --color-border: #2c2c2f;
+  --color-border-strong: #45454a;
+  --color-text: #ebebe8;
+  --color-text-muted: #9a9a97;
+  --color-text-faint: #66666a;
+  --color-accent: #8fa3ff;
+  --color-accent-soft: #232a4d;
+  --color-accent-fg: #0f1330;
+  --color-danger: #f08a86;
+  --color-danger-soft: #3d2222;
+  --color-selection: #2b3566;
+
+  --color-icon-gray: #a3a3a0;
+  --color-icon-red: #f08a86;
+  --color-icon-orange: #eea062;
+  --color-icon-amber: #dcbb5c;
+  --color-icon-green: #86c795;
+  --color-icon-teal: #6fcbc2;
+  --color-icon-sky: #7cbfea;
+  --color-icon-blue: #8fa3ff;
+  --color-icon-violet: #b39cf5;
+  --color-icon-pink: #ef93c0;
+
+  --color-syntax-heading: #f3f3ef;
+  --color-syntax-marker: #5a5a5f;
+  --color-syntax-link: #8fa3ff;
+  --color-syntax-url: #7a7a80;
+  --color-syntax-code: #d8d8d2;
+  --color-syntax-code-bg: #262628;
+  --color-syntax-quote: #a6a6a2;
+  --color-syntax-keyword: #c79ad9;
+  --color-syntax-string: #8fcaa6;
+  --color-syntax-number: #e6a06f;
+  --color-syntax-comment: #6b6b70;
+  --color-syntax-function: #86b6df;
+  --color-syntax-type: #d1b46a;
+
+  --shadow-lift: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--color-border-strong);
+  --shadow-sheet: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 20px 48px -16px rgba(0, 0, 0, 0.7);
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--color-canvas);
+    color: var(--color-text);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  #app {
+    height: 100dvh;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+
+  /* The document sheet: width of the text column and its distance from the toolbar.
+     Widescreen by default -- the column stretches with the pane up to a cap that
+     keeps long lines readable. The outline gutter reads --doc-top to line up with
+     the first line of text. */
+  [data-layout] {
+    --doc-max: min(1200px, 100%);
+    --doc-top: 3rem;
+  }
+
+  [data-layout="preview"],
+  [data-layout="reader"] {
+    --doc-max: min(1120px, 100%);
+  }
+
+  ::selection {
+    background: var(--color-selection);
+  }
+
+  kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.25rem;
+    padding: 0 0.35rem;
+    border-radius: 5px;
+    background: var(--color-surface-raised);
+    box-shadow: inset 0 0 0 1px var(--color-border);
+    color: var(--color-text-muted);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  [data-no-transitions],
+  [data-no-transitions] *,
+  [data-no-transitions] *::before,
+  [data-no-transitions] *::after {
+    transition: none !important;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 180ms;
+    animation-timing-function: var(--ease-out-quick);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility scrollbar-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+/* Quiet icon button: the one interactive shape used across the chrome. */
+@utility icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  border-radius: 7px;
+  color: var(--color-text-muted);
+  transition:
+    background-color 120ms var(--ease-out-quick),
+    color 120ms var(--ease-out-quick);
+
+  &:hover {
+    background: var(--color-hover);
+    color: var(--color-text);
+  }
+
+  &:disabled {
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  &[aria-pressed="true"],
+  &[aria-expanded="true"],
+  &[data-active="true"] {
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+  }
+}
+
+/* Segmented control: a raised track holding small radio-like buttons. The
+   checked button lifts to the surface colour. */
+@utility segment-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border-radius: 8px;
+  background: var(--color-hover);
+}
+
+@utility segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  min-width: 1.75rem;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  transition: color 120ms var(--ease-out-quick);
+
+  &:hover {
+    color: var(--color-text);
+  }
+
+  &[aria-pressed="true"],
+  &[aria-checked="true"] {
+    background: var(--color-surface);
+    color: var(--color-text);
+    box-shadow: var(--shadow-lift);
+  }
+}
+
+/* Text buttons for the few places that need a labelled action outside the
+   toolbar: the storage gate and the settings page. */
+@utility button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  padding-inline: 0.875rem;
+  border-radius: 8px;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-weight: 700;
+  transition: opacity 120ms var(--ease-out-quick);
+
+  &:hover {
+    opacity: 0.92;
+  }
+
+  &:disabled {
+    pointer-events: none;
+    opacity: 0.4;
+  }
+}
+
+@utility button-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  padding-inline: 0.875rem;
+  border-radius: 8px;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  transition: background-color 120ms var(--ease-out-quick);
+
+  &:hover {
+    background: var(--color-hover-strong);
+  }
+
+  &:disabled {
+    pointer-events: none;
+    opacity: 0.4;
+  }
+}
+
+/* A row inside a menu: toolbar menus and context menus share it. */
+@utility menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 7px;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+  color: var(--color-text-muted);
+  outline: none;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+  }
+
+  &[aria-checked="true"] {
+    color: var(--color-text);
+  }
+
+  &[data-danger="true"],
+  &[data-danger="true"]:hover,
+  &[data-danger="true"]:focus-visible {
+    color: var(--color-danger);
+  }
+
+  &[data-danger="true"]:hover,
+  &[data-danger="true"]:focus-visible {
+    background: var(--color-danger-soft);
+  }
+
+  &:disabled {
+    pointer-events: none;
+    opacity: 0.4;
+  }
+}
+
+/* The tinted square behind a document monogram, washed from its own ink. */
+@utility icon-tile {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+/* Popover surface shared by menus and small dialogs. */
+@utility popover {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+}
+
+/* The raised document sheet. Rounded and inset on the canvas; edge to edge on
+   small screens and in focus mode, where it is the only thing on screen. */
+@utility sheet {
+  border-radius: var(--radius-sheet);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sheet);
+  border: 1px solid var(--color-border);
+}

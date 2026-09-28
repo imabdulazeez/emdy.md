@@ -1,0 +1,897 @@
+.editor-host {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.editor-host .cm-editor {
+  height: 100%;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.editor-host[data-editor-mode="preview"] .cm-editor {
+  font-family: var(--font-prose);
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
+}
+
+.editor-host[data-editor-mode="preview"] .cm-content.cm-lineWrapping {
+  white-space: pre-wrap;
+}
+
+.editor-host .cm-editor.cm-focused {
+  outline: none;
+}
+
+.editor-host .cm-scroller {
+  font-family: inherit;
+  line-height: inherit;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.editor-host .cm-content {
+  width: 100%;
+  max-width: var(--doc-max);
+  margin: 0 auto;
+  padding: var(--doc-top) 2.5rem 35vh;
+  caret-color: var(--color-accent);
+}
+
+.editor-host[data-rulers="true"] .cm-content {
+  margin-left: 0;
+  padding-left: 1.25rem;
+}
+
+.editor-host .cm-editor .cm-gutters {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  line-height: calc(1.8 / 0.8);
+  user-select: none;
+}
+
+.editor-host[data-editor-mode="preview"] .cm-editor .cm-gutters {
+  line-height: calc(var(--leading-prose) / 0.8);
+}
+
+.editor-host .cm-editor .cm-lineNumbers .cm-gutterElement {
+  min-width: 3ch;
+  padding: 0 0 0 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-host[data-editor-mode="preview"]
+  .cm-editor
+  .cm-lineNumbers
+  .cm-gutterElement:not(.cm-gutter-heading)::before {
+  content: "\200b";
+  font-family: var(--font-prose);
+  font-size: calc(1em / 0.8);
+  line-height: var(--leading-prose);
+}
+
+/* Preview headings are taller and padded; a zero-width strut in the heading's
+   face and size puts the number on the heading's first baseline. */
+.editor-host .cm-editor .cm-lineNumbers .cm-gutter-heading {
+  padding-top: calc(0.6em * var(--gutter-heading) / 0.8);
+  line-height: 1.3;
+}
+
+.editor-host .cm-editor .cm-lineNumbers .cm-gutter-heading::before {
+  content: "\200b";
+  font-family: var(--font-prose);
+  font-size: calc(1em * var(--gutter-heading) / 0.8);
+}
+
+.editor-host .cm-gutter-h1 {
+  --gutter-heading: 1.85;
+}
+
+.editor-host .cm-gutter-h2 {
+  --gutter-heading: 1.5;
+}
+
+.editor-host .cm-gutter-h3 {
+  --gutter-heading: 1.25;
+}
+
+.editor-host .cm-gutter-h4 {
+  --gutter-heading: 1.1;
+}
+
+.editor-host .cm-gutter-h5 {
+  --gutter-heading: 1;
+}
+
+.editor-host .cm-gutter-h6 {
+  --gutter-heading: 0.95;
+}
+
+.editor-host .cm-editor .cm-activeLineGutter {
+  background: transparent;
+  color: var(--color-accent);
+}
+
+.editor-host .cm-column-ruler {
+  position: relative;
+  height: 1.5rem;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  user-select: none;
+}
+
+.editor-host .cm-column-ruler-scale {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-image:
+    linear-gradient(to right, var(--color-border-strong) 1px, transparent 1px),
+    linear-gradient(to right, var(--color-border) 1px, transparent 1px);
+  background-position:
+    left bottom,
+    left bottom;
+  background-repeat: repeat-x;
+  background-size:
+    calc(var(--ruler-cell) * 5) 7px,
+    var(--ruler-cell) 4px;
+}
+
+.editor-host .cm-column-ruler-label {
+  position: absolute;
+  top: 3px;
+  transform: translateX(-50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-host .cm-column-ruler-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-bottom: 2px solid var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.editor-host .cm-placeholder {
+  color: var(--color-text-faint);
+}
+
+.editor-host .cm-line {
+  padding: 0;
+}
+
+.editor-host .cm-live-heading {
+  color: var(--color-syntax-heading);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  padding-top: 0.6em;
+  padding-bottom: 0.2em;
+}
+
+.editor-host .cm-live-h1 {
+  font-size: 1.85em;
+}
+
+.editor-host .cm-live-h2 {
+  font-size: 1.5em;
+}
+
+.editor-host .cm-live-h3 {
+  font-size: 1.25em;
+}
+
+.editor-host .cm-live-h4 {
+  font-size: 1.1em;
+}
+
+.editor-host .cm-live-h5 {
+  font-size: 1em;
+}
+
+.editor-host .cm-live-h6 {
+  font-size: 0.95em;
+  color: var(--color-text-muted);
+}
+
+.editor-host .cm-live-strong {
+  font-weight: 700;
+}
+
+.editor-host .cm-live-emphasis {
+  font-style: italic;
+}
+
+.editor-host .cm-live-strike {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.editor-host .cm-live-code {
+  border-radius: 3px;
+  background: var(--color-syntax-code-bg);
+  color: var(--color-syntax-code);
+  padding: 0.1em 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+.editor-host .cm-live-link {
+  color: var(--color-syntax-link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  text-underline-offset: 3px;
+}
+
+.editor-host .cm-live-quote {
+  border-left: 2px solid var(--color-border-strong);
+  padding: 0 1.25rem;
+  color: var(--color-syntax-quote);
+  font-style: italic;
+}
+
+.editor-host .cm-live-quote .cm-live-footnote {
+  font-style: normal;
+}
+
+.editor-host .cm-live-footnote {
+  position: relative;
+  top: -0.45em;
+  padding-inline: 0.15em;
+  color: var(--color-accent);
+  font-family: var(--font-ui);
+  font-size: 0.7em;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 0;
+  vertical-align: baseline;
+  text-decoration: none;
+}
+
+/* List items hang from a 1.5em marker gutter per level, as in Read-only preview:
+   markers sit in the gutter, text and wrapped lines align after it. */
+.editor-host .cm-live-list {
+  padding-left: calc(var(--list-depth, 1) * 1.5em);
+}
+
+.editor-host .cm-live-list-item {
+  text-indent: -1.5em;
+}
+
+.editor-host .cm-live-list-marker {
+  display: inline-block;
+  min-width: 1.5em;
+  text-indent: 0;
+  white-space: pre;
+}
+
+.editor-host .cm-live-list-bullet {
+  padding-left: 0.25em;
+  color: var(--color-accent);
+}
+
+.editor-host .cm-live-list-number {
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 1.5em;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-host .cm-live-task {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.editor-host .cm-live-list-item .cm-live-task {
+  min-width: 1.5em;
+  text-indent: 0;
+}
+
+.editor-host .cm-live-task input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.editor-host .cm-live-task input[aria-disabled="true"] {
+  cursor: default;
+}
+
+.editor-host .cm-live-rule {
+  display: inline-block;
+  width: 100%;
+  height: 1px;
+  vertical-align: middle;
+  background: var(--color-border-strong);
+}
+
+.editor-host .cm-live-codeblock,
+.editor-host .cm-live-table {
+  background: var(--color-syntax-code-bg);
+  padding: 0 1rem;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* Fenced blocks are framed line by line: the first and last lines carry the
+   rounded corners, every line carries the side borders. */
+.editor-host .cm-live-codeblock {
+  border-inline: 1px solid var(--color-border);
+  /* Hanging indent so wrapped continuations read as part of their line. */
+  padding-left: calc(1rem + 2ch);
+  text-indent: -2ch;
+}
+
+.editor-host .cm-live-codeblock-start {
+  border-top: 1px solid var(--color-border);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.editor-host .cm-live-codeblock-end {
+  border-bottom: 1px solid var(--color-border);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  padding-bottom: 0.45rem;
+}
+
+.editor-host .cm-live-codeblock-body-start {
+  padding-top: 0.5rem;
+}
+
+/* Header row: language / filename on the left, actions on the right. */
+.editor-host .cm-live-fence-open {
+  padding: 0.3rem 0.45rem 0.3rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  text-indent: 0;
+}
+
+.editor-host .cm-live-fence-close {
+  text-indent: 0;
+}
+
+.editor-host .cm-live-fence-close.cm-live-fence-hidden {
+  padding-top: 0.1rem;
+  font-size: 0;
+  line-height: 0.35rem;
+}
+
+.editor-host .cm-live-code-header {
+  /* inline-flex keeps CodeMirror's zero-width widget buffers on the same line. */
+  display: inline-flex;
+  width: 100%;
+  vertical-align: middle;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 1.5rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.3;
+  user-select: none;
+}
+
+.editor-host .cm-live-language {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.editor-host .cm-live-code-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.editor-host .cm-live-code-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+
+.editor-host .cm-live-code-action:hover {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  color: var(--color-text);
+}
+
+.editor-host .cm-live-code-action:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.editor-host .cm-live-code-action[data-copied="true"] {
+  color: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-host .cm-live-code-action {
+    transition: none;
+  }
+}
+
+.editor-host .cm-live-table-header {
+  font-weight: 700;
+}
+
+/* Table source (while the cursor is inside): framed mono grid, quiet pipes. */
+.editor-host .cm-live-table {
+  border-inline: 1px solid var(--color-border);
+}
+
+.editor-host .cm-live-table-start {
+  border-top: 1px solid var(--color-border);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  padding-top: 0.35rem;
+}
+
+.editor-host .cm-live-table-end {
+  border-bottom: 1px solid var(--color-border);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  padding-bottom: 0.35rem;
+}
+
+.editor-host .cm-live-table-delimiter {
+  color: var(--color-syntax-marker);
+}
+
+/* Rendered table (block widget shown while the cursor is elsewhere). */
+.editor-host .cm-live-table-widget {
+  padding: 0.35rem 0 0.85rem;
+  cursor: text;
+}
+
+.editor-host .cm-live-table-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+/* The copy control sits over the header row, below the widget's top padding. */
+.editor-host .cm-live-table-widget > .table-tools {
+  top: 0.45rem;
+  cursor: default;
+}
+
+.editor-host .cm-live-table-widget table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+
+.editor-host .cm-live-table-widget th,
+.editor-host .cm-live-table-widget td {
+  padding: 0.45em 0.75em;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.editor-host .cm-live-table-widget th {
+  color: var(--color-text-muted);
+  border-bottom-color: var(--color-border-strong);
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.editor-host .cm-live-table-widget tbody tr:last-child td {
+  border-bottom-color: var(--color-border-strong);
+}
+
+.editor-host .cm-live-table-widget tbody tr:hover td {
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+
+.editor-host .cm-live-table-widget [data-align="center"] {
+  text-align: center;
+}
+
+.editor-host .cm-live-table-widget [data-align="right"] {
+  text-align: right;
+}
+
+.editor-host .cm-live-table-widget code {
+  border-radius: 3px;
+  background: var(--color-syntax-code-bg);
+  color: var(--color-syntax-code);
+  padding: 0.1em 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+.editor-host .cm-live-table-widget a {
+  color: var(--color-syntax-link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.editor-host .cm-live-table-widget s {
+  color: var(--color-text-muted);
+}
+
+.editor-host .cm-live-image {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* Rendered image (inline widget shown while the cursor is on another line). */
+.editor-host .cm-live-image-widget {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  max-width: 100%;
+  vertical-align: middle;
+  cursor: text;
+}
+
+.editor-host .cm-live-image-widget img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 3px;
+  user-select: none;
+}
+
+.editor-host .cm-live-image-widget:not(.cm-live-image-block) img {
+  max-height: 1.6em;
+  vertical-align: middle;
+}
+
+.editor-host .cm-live-image-block {
+  width: 100%;
+  padding: 0.25rem 0 0.4rem;
+}
+
+.editor-host .cm-live-image-block img {
+  border-radius: 8px;
+}
+
+.editor-host .cm-live-image-caption {
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.editor-host .cm-live-image-fallback {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2em 0.6em;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+}
+
+.editor-host .cm-live-image-fallback::before {
+  content: "⚠";
+  font-size: 0.9em;
+}
+
+@media (max-width: 640px) {
+  .editor-host .cm-content {
+    padding: 1.25rem 1.25rem 30vh;
+  }
+
+  .editor-host[data-editor-mode="preview"] .cm-editor {
+    font-size: 16px;
+  }
+
+  .editor-host .cm-live-h1 {
+    font-size: 1.6em;
+  }
+}
+
+.editor-host .cm-cursor,
+.editor-host .cm-dropCursor {
+  border-left: 2px solid var(--color-accent);
+}
+
+.editor-host .cm-selectionBackground,
+.editor-host .cm-editor.cm-focused .cm-selectionBackground,
+.editor-host .cm-content ::selection {
+  background: var(--color-selection);
+}
+
+.editor-host .cm-selectionMatch {
+  background: var(--color-accent-soft);
+}
+
+.editor-host .cm-panels {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.editor-host .cm-panels.cm-panels-top {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.editor-host .cm-panel.cm-search {
+  padding: 0.5rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.editor-host .cm-panel.cm-search input,
+.editor-host .cm-panel.cm-search button,
+.editor-host .cm-panel.cm-search label {
+  font: inherit;
+  color: inherit;
+}
+
+.editor-host .cm-panel.cm-search input {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+}
+
+.editor-host .cm-panel.cm-search input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
+  border-color: transparent;
+}
+
+.editor-host .cm-panel.cm-search button {
+  background: var(--color-surface-raised);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  background-image: none;
+  text-shadow: none;
+}
+
+.editor-host .cm-panel.cm-search button:hover {
+  border-color: var(--color-border-strong);
+}
+
+.editor-host .cm-searchMatch {
+  background: var(--color-accent-soft);
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
+.editor-host .cm-searchMatch-selected {
+  background: var(--color-selection);
+}
+
+/* The @ and / menus: a popover of menu rows at the caret. */
+.editor-host .cm-tooltip.composer-menu {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 0.25rem;
+}
+
+.editor-host .cm-tooltip.composer-menu > ul {
+  min-width: 14rem;
+  max-width: min(24rem, calc(100vw - 2rem));
+  max-height: 18rem;
+  font-family: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.editor-host .cm-tooltip.composer-menu > ul > li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  border-radius: 7px;
+  padding: 0.375rem 0.5rem;
+  line-height: inherit;
+}
+
+.editor-host .cm-tooltip.composer-menu > ul > li:hover {
+  background: var(--color-hover);
+}
+
+.editor-host .cm-tooltip.composer-menu > ul > li[aria-selected] {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.editor-host .cm-tooltip.composer-menu > ul > completion-section {
+  border: 0;
+  opacity: 1;
+  padding: 0.5rem 0.5rem 0.125rem;
+  color: var(--color-text-faint);
+  font-size: 11px;
+}
+
+.editor-host .cm-tooltip.composer-menu > ul > completion-section:first-child {
+  padding-top: 0.25rem;
+}
+
+.editor-host .cm-tooltip.composer-menu .cm-completionLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-host .cm-tooltip.composer-menu .cm-completionDetail {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-style: normal;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.editor-host .cm-tooltip.composer-menu .cm-completionMatchedText {
+  text-decoration: none;
+  font-weight: bold;
+  color: var(--color-text);
+}
+
+/* Table grid editor (block widget shown while the table is being edited). */
+.editor-host .cm-table-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.85rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-surface);
+  padding: 0.4rem 0.4rem 0.3rem;
+}
+
+.editor-host .cm-table-editor-grid {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.editor-host .cm-table-editor table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.editor-host .cm-table-editor th,
+.editor-host .cm-table-editor td {
+  padding: 0;
+  border: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.editor-host .cm-table-editor thead th {
+  border-bottom-color: var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
+.editor-host .cm-table-editor-input {
+  width: 100%;
+  min-width: 7ch;
+  box-sizing: border-box;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 0.35em 0.6em;
+  color: var(--color-text);
+  font: inherit;
+  font-family: var(--font-mono);
+}
+
+.editor-host .cm-table-editor thead .cm-table-editor-input {
+  font-family: var(--font-ui);
+  font-weight: 600;
+}
+
+.editor-host .cm-table-editor-input[data-align="center"] {
+  text-align: center;
+}
+
+.editor-host .cm-table-editor-input[data-align="right"] {
+  text-align: right;
+}
+
+.editor-host .cm-table-editor-input:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-radius: 2px;
+}
+
+.editor-host .cm-table-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.editor-host .cm-table-editor-action {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  padding: 0.15rem 0.45rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.editor-host .cm-table-editor-action:hover:not(:disabled) {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+/* Copy reads the table rather than changing it, so it stands a little apart. */
+.editor-host .cm-table-editor-action[data-copy] {
+  margin-inline-start: 0.375rem;
+}
+
+.editor-host .cm-table-editor-action[aria-expanded="true"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.editor-host .cm-table-editor-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-host .cm-table-editor-action {
+    transition: none;
+  }
+}

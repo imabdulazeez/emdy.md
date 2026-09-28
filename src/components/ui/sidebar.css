@@ -1,0 +1,25 @@
+[data-sidebar="provider"] {
+  --sidebar-width: 15rem;
+  --sidebar-width-icon: 3.25rem;
+}
+
+.sidebar-root {
+  width: var(--sidebar-width);
+  transition: width 200ms var(--ease-out-quick);
+}
+
+.sidebar-root[data-collapsible="icon"] {
+  width: var(--sidebar-width-icon);
+}
+
+.sidebar-root[data-collapsible="offcanvas"] {
+  width: 0;
+}
+
+.sidebar-root[data-collapsible="offcanvas"] > * {
+  width: var(--sidebar-width);
+}
+
+.sidebar-mobile {
+  width: min(var(--sidebar-width), 85vw);
+}

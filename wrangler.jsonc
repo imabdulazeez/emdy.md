@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "emdy-md",
+  "compatibility_date": "2026-09-27",
+  "send_metrics": false,
+  "dependencies_instrumentation": { "enabled": false },
+  "workers_dev": false,
+  "routes": [{ "pattern": "emdy.md", "custom_domain": true }],
+  "assets": {
+    "directory": "./dist",
+  },
+}

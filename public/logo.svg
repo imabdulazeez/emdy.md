@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="emdy.md">
+  <style>
+    .sheet { fill: #ffffff; }
+    .ink { stroke: #1b1b19; }
+    .caret { stroke: #2d4bd1; }
+    @media (prefers-color-scheme: dark) {
+      .sheet { fill: #1b1b1d; }
+      .ink { stroke: #ebebe8; }
+      .caret { stroke: #8fa3ff; }
+    }
+  </style>
+  <rect class="sheet" width="512" height="512"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(-7 -8) scale(22)">
+    <path class="ink" d="M3.5 7v10M3.5 10a3 3 0 0 1 6 0v7M9.5 10a3 3 0 0 1 6 0v7" stroke-width="2.25"/>
+    <path class="caret" d="M20.5 4.5v15" stroke-width="2"/>
+  </g>
+</svg>

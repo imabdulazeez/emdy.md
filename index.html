@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>emdy.md · Private Markdown editor that runs in your browser</title>
+    <meta
+      name="description"
+      content="A free, fast, private Markdown editor that runs entirely in your browser. No account, no uploads: your documents stay on your device as plain .md files."
+    />
+    <link rel="canonical" href="https://emdy.md/" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="application-name" content="emdy.md" />
+    <meta name="apple-mobile-web-app-title" content="emdy.md" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="emdy.md" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://emdy.md/" />
+    <meta
+      property="og:title"
+      content="emdy.md · Private Markdown editor that runs in your browser"
+    />
+    <meta
+      property="og:description"
+      content="Write Markdown with a live preview, outline, themes, and Word or PDF export. Everything stays on your device: no account, no uploads, no tracking."
+    />
+    <meta property="og:image" content="https://emdy.md/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="emdy.md: a private Markdown editor that runs in your browser."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://emdy.md/#website",
+            "url": "https://emdy.md/",
+            "name": "emdy.md",
+            "alternateName": "emdy",
+            "inLanguage": "en"
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://emdy.md/#app",
+            "url": "https://emdy.md/",
+            "name": "emdy.md",
+            "description": "A free, fast, private Markdown editor that runs entirely in your browser. Documents stay on your device as plain .md files.",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "Markdown editor",
+            "operatingSystem": "Any",
+            "browserRequirements": "Requires JavaScript and a browser with the Origin Private File System.",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "featureList": [
+              "Editable live preview and raw Markdown modes",
+              "Document outline and links between documents",
+              "Light, dark, and custom colour themes",
+              "Export to Markdown, Word (.docx), and PDF",
+              "Keyboard shortcuts for every action",
+              "Stores documents only on your device"
+            ],
+            "image": "https://emdy.md/og-image.png",
+            "isPartOf": { "@id": "https://emdy.md/#website" }
+          }
+        ]
+      }
+    </script>
+    <script>
+      (function () {
+        function read(key) {
+          try {
+            return JSON.parse(localStorage.getItem(key));
+          } catch (error) {
+            return null;
+          }
+        }
+        var root = document.documentElement;
+        var stored = read("emdy:pref:theme");
+        var theme =
+          stored === "dark" || stored === "light"
+            ? stored
+            : matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        root.setAttribute("data-no-transitions", "");
+        root.dataset.theme = theme;
+        root.style.colorScheme = theme;
+        var font = read("emdy:pref:font");
+        root.dataset.font =
+          font === "serif" || font === "mono" || font === "handwriting" ? font : "sans";
+        var builtIn = "__EMDY_THEMES__";
+        var id = read("emdy:pref:palette");
+        var custom = read("emdy:pref:custom-themes");
+        var palette = typeof builtIn === "object" && builtIn[id];
+        if (!palette && Array.isArray(custom)) {
+          for (var i = 0; i < custom.length; i++) {
+            if (custom[i] && custom[i].id === id) palette = custom[i];
+          }
+        }
+        var colors = palette && palette[theme];
+        if (!colors || typeof colors !== "object") return;
+        for (var role in colors) {
+          if (/^#[0-9a-f]{6}$/.test(colors[role])) {
+            root.style.setProperty("--color-" + role, colors[role]);
+          }
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      <main
+        style="
+          max-width: 40rem;
+          margin: 4rem auto;
+          padding: 0 1rem;
+          font-family: system-ui, sans-serif;
+          line-height: 1.5;
+        "
+      >
+        <h1>emdy.md: a private Markdown editor that runs in your browser</h1>
+        <p>
+          emdy.md is a free, fast Markdown editor that keeps everything on your device. Your
+          documents are plain <code>.md</code> files in your browser's own storage. There is no
+          account, nothing is uploaded, and there is no tracking of any kind.
+        </p>
+        <ul>
+          <li>Write in raw Markdown or an editable live preview.</li>
+          <li>Navigate long documents with an outline, and link documents to each other.</li>
+          <li>Choose light, dark, or custom colour themes and a document font.</li>
+          <li>Export to Markdown, Word (.docx), or PDF, and move your library with one file.</li>
+          <li>Reach every action from the keyboard.</li>
+        </ul>
+        <p>emdy.md needs JavaScript. Turn it on and reload the page to start writing.</p>
+      </main>
+    </noscript>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

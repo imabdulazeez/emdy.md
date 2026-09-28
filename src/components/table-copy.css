@@ -1,0 +1,35 @@
+/* A rendered table's copy control: a quiet icon button on a glass chip
+   (bg-glass, backdrop-blur-sm) over the table's top-right corner. It appears
+   while the pointer or focus is on the table, stays while its menu is open,
+   and is always shown on touch screens, which have no hover. */
+.table-block {
+  position: relative;
+}
+
+.table-tools {
+  position: absolute;
+  top: 0.125rem;
+  right: 0.125rem;
+  z-index: 1;
+  display: flex;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out-quick);
+}
+
+.table-block:hover > .table-tools,
+.table-tools:focus-within,
+.table-tools:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .table-tools {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-tools {
+    transition: none;
+  }
+}

@@ -1,0 +1,69 @@
+/* The outline is docked to the far left of the document sheet. Depth is encoded
+   by indentation alone; the active heading carries a small ink marker. The rail
+   appears only when the pane is wide enough to give up the space. */
+.outline-gutter {
+  --outline-width: 13.5rem;
+
+  display: none;
+  flex-shrink: 0;
+  flex-direction: column;
+  min-height: 0;
+  width: var(--outline-width);
+}
+
+.outline-gutter-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: calc(var(--doc-top) + 0.1rem) 0.5rem 4rem 1rem;
+}
+
+.outline-entry {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0.2rem 0.5rem 0.2rem calc(0.75rem + var(--outline-depth, 0) * 0.7rem);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: left;
+  transition:
+    color 120ms var(--ease-out-quick),
+    background-color 120ms var(--ease-out-quick);
+}
+
+.outline-entry-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-entry:hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+.outline-entry[aria-current="location"] {
+  color: var(--color-text);
+}
+
+.outline-entry[aria-current="location"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 0.9em;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transform: translateY(-50%);
+}
+
+@container (min-width: 1100px) {
+  .outline-gutter {
+    display: flex;
+  }
+}
