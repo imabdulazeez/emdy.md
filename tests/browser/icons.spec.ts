@@ -94,6 +94,7 @@ test("an icon chosen from the right-click menu is saved beside the files and sur
   await reading().focus();
   await page.keyboard.press("Shift+F10");
   await page.keyboard.press("End");
+  await page.keyboard.press("ArrowUp");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(reading().locator("[data-document-icon=automatic] text")).toHaveText("RL");
@@ -134,6 +135,8 @@ test("context menus stay on screen, open from the keyboard, and hand focus back"
   expect(menuBox.y).toBeGreaterThanOrEqual(anchor.y);
   expect(Math.abs(menuBox.x - anchor.x)).toBeLessThan(anchor.width);
   await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "Pin", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("menuitem", { name: "Delete…", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");

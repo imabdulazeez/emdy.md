@@ -33,6 +33,8 @@ import {
   documentPosition,
   documentPositions,
   lastDocumentId,
+  pinDocument,
+  pinnedDocumentIds,
   rememberDocument,
   resetWorkspaceState,
   savePosition,
@@ -243,6 +245,20 @@ describe("document state", () => {
     flush(() => savePosition("gone00", { line: 9 }));
     flush(() => loadDocuments(TEST_DOCUMENTS));
     expect(Object.keys(documentPositions())).toEqual([first.id]);
+  });
+
+  it("unpins deleted documents and prunes pins for missing ones on load", () => {
+    const [first, second, third] = documents();
+    flush(() => {
+      pinDocument(first.id);
+      pinDocument(second.id);
+      pinDocument(third.id);
+    });
+    flush(() => deleteDocument(second.id));
+    expect(pinnedDocumentIds()).toEqual([first.id, third.id]);
+    flush(() => pinDocument("gone00"));
+    flush(() => loadDocuments(TEST_DOCUMENTS));
+    expect(pinnedDocumentIds()).toEqual([first.id, third.id]);
   });
 
   it("exposes an empty placeholder before anything is loaded", () => {

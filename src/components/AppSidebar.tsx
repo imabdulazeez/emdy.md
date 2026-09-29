@@ -25,6 +25,7 @@ import {
   type ThemePreference,
 } from "~/state/theme";
 import { closeSettings, openSettings, view } from "~/state/navigation";
+import { isPinned, pinDocument, pinnedDocumentIds, unpinDocument } from "~/state/workspace";
 import {
   requestEditorFocus,
   searchRequested,
@@ -93,6 +94,7 @@ function DocumentItem(props: DocumentItemProps) {
     <SidebarMenuItem
       ref={(el) => (row = el)}
       data-document-row=""
+      data-document-id={props.doc.id}
       data-removing={props.removing ? "" : undefined}
       inert={props.removing}
     >
@@ -189,12 +191,29 @@ export default function AppSidebar() {
   } | null>(null);
   let newDocumentButton: HTMLButtonElement | undefined;
   let searchInput: HTMLInputElement | undefined;
+  let nav: HTMLElement | undefined;
+  const pinned = createMemo(
+    () => {
+      const byId = new Map(documents().map((doc) => [doc.id, doc]));
+      return pinnedDocumentIds().flatMap((id) => {
+        const doc = byId.get(id);
+        return doc ? [toListing(doc)] : [];
+      });
+    },
+    {
+      equals: (a, b) =>
+        a.length === b.length && a.every((doc, index) => sameListing(doc, b[index])),
+    },
+  );
   const sections = createMemo(
-    () =>
-      groupByRecency(documents(), (doc) => doc.modified, Date.now()).map((section) => ({
+    () => {
+      const pins = new Set(pinnedDocumentIds());
+      const unpinned = documents().filter((doc) => !pins.has(doc.id));
+      return groupByRecency(unpinned, (doc) => doc.modified, Date.now()).map((section) => ({
         ...section,
         items: section.items.map(toListing),
-      })),
+      }));
+    },
     { equals: (a, b) => sameSections(a, b, sameListing) },
   );
   const searching = () => sidebar.expanded() && normalizeQuery(query()) !== "";
@@ -304,6 +323,14 @@ export default function AppSidebar() {
     });
   };
 
+  const setPinned = (id: string, pin: boolean) => {
+    flush(() => (pin ? pinDocument(id) : unpinDocument(id)));
+    Array.from(nav?.querySelectorAll<HTMLElement>("[data-document-row]") ?? [])
+      .find((row) => row.dataset.documentId === id)
+      ?.querySelector<HTMLElement>("[data-sidebar=menu-button]")
+      ?.focus();
+  };
+
   const openFirstResult = () => {
     const first = results().titles[0] ?? results().contents[0]?.item;
     if (first) open(first.id);
@@ -373,6 +400,13 @@ export default function AppSidebar() {
         icon: "type",
         onSelect: () => setDocumentIcon(doc.id, null),
       });
+    const pinnedNow = isPinned(doc.id);
+    items.push({
+      id: pinnedNow ? "unpin" : "pin",
+      label: pinnedNow ? "Unpin" : "Pin",
+      icon: pinnedNow ? "pin-off" : "pin",
+      onSelect: () => setPinned(doc.id, !pinnedNow),
+    });
     if (sidebar.expanded())
       items.push({
         id: "delete",
@@ -458,7 +492,7 @@ export default function AppSidebar() {
         </div>
       </Show>
       <SidebarContent onContextMenu={libraryMenu}>
-        <nav aria-label="Main" class="flex flex-col">
+        <nav ref={(el) => (nav = el)} aria-label="Main" class="flex flex-col">
           <Show when={searching()}>
             <SidebarGroup class="px-2 py-0">
               <Show
@@ -502,6 +536,16 @@ export default function AppSidebar() {
           <Show when={!searching()}>
             <SidebarGroup class="px-2 py-0">
               <SidebarMenu aria-label="Documents" class="gap-px">
+                <Show when={pinned().length > 0}>
+                  <li>
+                    <SidebarGroupLabel id="documents-pinned">Pinned</SidebarGroupLabel>
+                    <SidebarMenu aria-labelledby="documents-pinned" class="gap-px">
+                      <For each={pinned()} keyed={(doc) => doc.id}>
+                        {(doc) => renderItem(doc)}
+                      </For>
+                    </SidebarMenu>
+                  </li>
+                </Show>
                 <For each={sections()} keyed={(section) => section.group}>
                   {(section) => (
                     <li>

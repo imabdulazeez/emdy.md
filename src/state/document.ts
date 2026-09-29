@@ -2,7 +2,14 @@ import { createMemo, createSignal, untrack } from "solid-js";
 import { sameDocumentIcon, type DocumentIcon } from "~/lib/document-icon";
 import { makeDocumentId } from "~/lib/route";
 import { deriveTitle, isAutomaticTitle, UNTITLED } from "~/lib/title";
-import { forgetPosition, lastDocumentId, rememberDocument, retainPositions } from "./workspace";
+import {
+  forgetPosition,
+  lastDocumentId,
+  rememberDocument,
+  retainPins,
+  retainPositions,
+  unpinDocument,
+} from "./workspace";
 
 export const DEFAULT_TITLE = UNTITLED;
 
@@ -119,6 +126,7 @@ function toRecords(records: readonly DocumentInput[]): DocumentRecord[] {
 export function loadDocuments(records: readonly DocumentInput[]): DocumentRecord[] {
   const list = toRecords(records);
   retainPositions(list.map((doc) => doc.id));
+  retainPins(list.map((doc) => doc.id));
   setDocumentsSignal(list);
   activate(startingDocumentId(list));
   return list;
@@ -238,6 +246,7 @@ export function deleteDocument(id: string): boolean {
   });
   if (index === -1) return false;
   forgetPosition(id);
+  unpinDocument(id);
   let next = "";
   setActiveDocumentIdSignal((current) => {
     if (current !== id) return current;

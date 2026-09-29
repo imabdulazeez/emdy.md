@@ -12,6 +12,8 @@ export interface DocumentPosition {
 
 export type PositionMap = Readonly<Record<string, DocumentPosition>>;
 
+export type PinnedList = readonly string[];
+
 const isIndex = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0;
 
@@ -24,6 +26,14 @@ export function isDocumentPosition(value: unknown): value is DocumentPosition {
 function isPositionMap(value: unknown): value is PositionMap {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   return Object.entries(value).every(([id, pos]) => isDocumentId(id) && isDocumentPosition(pos));
+}
+
+export function isPinnedList(value: unknown): value is PinnedList {
+  return (
+    Array.isArray(value) &&
+    value.every((id) => typeof id === "string" && isDocumentId(id)) &&
+    new Set(value).size === value.length
+  );
 }
 
 const lastDocument = createPersistedSignal<string | null>({
@@ -46,9 +56,16 @@ const positions = createPersistedSignal<PositionMap>({
   writeDelayMs: POSITION_WRITE_DELAY_MS,
 });
 
+const pins = createPersistedSignal<PinnedList>({
+  key: storageKey("workspace", "pinned"),
+  fallback: [],
+  parse: isPinnedList,
+});
+
 export const lastDocumentId = lastDocument.value;
 export const sidebarPreference = sidebar.value;
 export const documentPositions = positions.value;
+export const pinnedDocumentIds = pins.value;
 
 export function rememberDocument(id: string): void {
   if (lastDocument.peek() !== id) lastDocument.set(id);
@@ -92,8 +109,30 @@ export function retainPositions(ids: Iterable<string>): void {
   positions.set(Object.fromEntries(Object.entries(map).filter(([id]) => keep.has(id))));
 }
 
+export function isPinned(id: string): boolean {
+  return pins.peek().includes(id);
+}
+
+export function pinDocument(id: string): void {
+  if (!isDocumentId(id) || isPinned(id)) return;
+  pins.set((list) => [...list, id]);
+}
+
+export function unpinDocument(id: string): void {
+  if (!isPinned(id)) return;
+  pins.set((list) => list.filter((pinned) => pinned !== id));
+}
+
+export function retainPins(ids: Iterable<string>): void {
+  const keep = new Set(ids);
+  const list = pins.peek();
+  if (list.every((id) => keep.has(id))) return;
+  pins.set(list.filter((id) => keep.has(id)));
+}
+
 export function resetWorkspaceState(): void {
   lastDocument.reset();
   sidebar.reset();
   positions.reset();
+  pins.reset();
 }
