@@ -288,6 +288,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.editor-host .cm-live-list-number[contenteditable="false"] {
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 1.5em;
+}
+
 .editor-host .cm-live-task {
   display: inline-flex;
   vertical-align: middle;
