@@ -283,9 +283,7 @@
 }
 
 .editor-host .cm-live-list-number {
-  display: inline-flex;
-  justify-content: flex-end;
-  width: 1.5em;
+  text-align: right;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }

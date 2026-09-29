@@ -254,3 +254,28 @@ test("bundled images, fenced code, and editing work without unexpected network r
   await expect(line("Offline edit")).toBeVisible();
   await expect(reader.getByRole("img", { name: "Local logo", exact: true })).toBeVisible();
 });
+
+test("typing three backticks opens a fence with exactly three backticks", async ({ page }) => {
+  await seedLibrary(page);
+  await page.getByRole("button", { name: "New document", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await editor.click();
+  await page.keyboard.type("```");
+  await page.keyboard.type("js");
+  await expect(editor.locator(".cm-line").first()).toHaveText("```js");
+});
+
+test("typing a numbered list marker in editable preview keeps the caret after its space", async ({
+  page,
+}) => {
+  await seedLibrary(page);
+  await page.getByRole("button", { name: "New document", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await editor.click();
+  await page.keyboard.press("ControlOrMeta+2");
+  await page.keyboard.type("1. first");
+  await expect(editor.locator(".cm-line").first()).toHaveText("1. first");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("second");
+  await expect(editor.locator(".cm-line").nth(1)).toHaveText("2. second");
+});

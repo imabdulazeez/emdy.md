@@ -63,6 +63,7 @@ export function autoPairTransaction(
   if (!PAIR_AHEAD.test(next)) return null;
   if (emphasisClose && WORD_CHAR.test(prev)) return null;
   if (emphasisClose && next === text) return null;
+  if (emphasisClose && prev === text && charAt(state, from - 2) === text) return null;
 
   return {
     changes: { from, insert: text + close },
