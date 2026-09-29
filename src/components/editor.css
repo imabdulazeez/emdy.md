@@ -283,11 +283,15 @@
 }
 
 .editor-host .cm-live-list-number {
+  text-align: right;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-host .cm-live-list-number[contenteditable="false"] {
   display: inline-flex;
   justify-content: flex-end;
   width: 1.5em;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .editor-host .cm-live-task {

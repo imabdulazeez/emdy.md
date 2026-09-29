@@ -49,6 +49,24 @@ describe("autoPairTransaction", () => {
     expect(apply("***", 1, 1, "*")).toEqual({ doc: "*****", head: 2, anchor: 2 });
   });
 
+  it("extends a run of markers instead of pairing again", () => {
+    expect(apply("``", 2, 2, "`")).toBeNull();
+    expect(apply("**", 2, 2, "*")).toBeNull();
+    expect(apply("~~", 2, 2, "~")).toBeNull();
+  });
+
+  it("types a code fence as three backticks", () => {
+    let doc = "";
+    let pos = 0;
+    for (let i = 0; i < 3; i++) {
+      const result = apply(doc, pos, pos, "`") ?? { doc: doc + "`", head: pos + 1 };
+      doc = result.doc;
+      pos = result.head;
+    }
+    expect(doc).toBe("```");
+    expect(pos).toBe(3);
+  });
+
   it("wraps a selection", () => {
     expect(apply("hello", 0, 5, "*")).toEqual({ doc: "*hello*", anchor: 1, head: 6 });
     expect(apply("hello", 0, 5, "(")).toEqual({ doc: "(hello)", anchor: 1, head: 6 });
