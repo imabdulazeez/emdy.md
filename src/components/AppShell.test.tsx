@@ -42,7 +42,7 @@ import {
   sidebarOpen,
 } from "~/state/ui";
 import { SHORTCUTS, ariaKeyShortcuts, formatShortcut, isMacPlatform } from "~/lib/shortcuts";
-import { resetWorkspaceState, sidebarPreference } from "~/state/workspace";
+import { resetWorkspaceState } from "~/state/workspace";
 
 import { getRenderClient } from "~/lib/preview/render-client";
 vi.mock("~/lib/preview/render-client", () => ({
@@ -90,7 +90,24 @@ afterEach(() => {
   delete document.documentElement.dataset.theme;
   document.documentElement.removeAttribute("style");
   window.history.replaceState(null, "", "/");
+  vi.restoreAllMocks();
 });
+
+function narrowViewport() {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string) =>
+      ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}
 
 async function mount() {
   flush(() => setDocText("# Heading\n\nbody text"));
@@ -262,10 +279,8 @@ describe("AppShell", () => {
   it("renders chrome and the editor by default", async () => {
     await mount();
     expect(screen.getByText("emdy.md")).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: "Sidebar" })).toHaveAttribute(
-      "data-state",
-      "expanded",
-    );
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sidebar/ })).toBeNull();
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Outline" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Document" })).toContainElement(
@@ -346,19 +361,26 @@ describe("AppShell", () => {
     );
   });
 
-  it("toggles the sidebar with Mod-\\", async () => {
+  it("keeps the desktop sidebar in place when Mod-\\ is pressed", async () => {
     const user = userEvent.setup();
     await mount();
-    expect(sidebarOpen()).toBe(true);
     await user.keyboard("{Control>}\\{/Control}");
     expect(sidebarOpen()).toBe(false);
-    expect(screen.getByRole("complementary", { name: "Sidebar" })).toHaveAttribute(
-      "data-state",
-      "collapsed",
-    );
-    expect(screen.getByRole("navigation", { name: "Outline" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Sidebar" })).toBeNull();
+  });
+
+  it("opens and shuts the sidebar drawer with Mod-\\ on narrow screens", async () => {
+    narrowViewport();
+    const user = userEvent.setup();
+    await mount();
+    expect(screen.queryByRole("complementary", { name: "Sidebar" })).toBeNull();
     await user.keyboard("{Control>}\\{/Control}");
     expect(sidebarOpen()).toBe(true);
+    expect(await screen.findByRole("dialog", { name: "Sidebar" })).toBeInTheDocument();
+    await user.keyboard("{Control>}\\{/Control}");
+    expect(sidebarOpen()).toBe(false);
+    expect(screen.queryByRole("dialog", { name: "Sidebar" })).toBeNull();
   });
 
   it("names the browser tab after the active document", async () => {
@@ -378,17 +400,14 @@ describe("AppShell", () => {
     expect(document.title).toBe("emdy.md · Private Markdown editor that runs in your browser");
   });
 
-  it("jumps to document search with Mod-P from focus mode and a collapsed sidebar", async () => {
+  it("jumps to document search with Mod-P from focus mode", async () => {
     const user = userEvent.setup();
     await mount();
-    flush(() => {
-      setSidebarOpen(false);
-      setFocusMode(true);
-    });
+    flush(() => setFocusMode(true));
     expect(screen.queryByRole("searchbox", { name: "Search documents" })).toBeNull();
     await user.keyboard("{Control>}p{/Control}");
     expect(focusMode()).toBe(false);
-    expect(sidebarOpen()).toBe(true);
+    expect(sidebarOpen()).toBe(false);
     const search = await screen.findByRole("searchbox", { name: "Search documents" });
     await waitFor(() => expect(search).toHaveFocus());
   });
@@ -620,19 +639,5 @@ describe("AppShell", () => {
     expect(themeDraft()).toBeNull();
     expect(root.dataset.theme).toBe("light");
     expect(root.style.getPropertyValue("--color-canvas")).toBe(DEFAULT_THEME.light.canvas);
-  });
-
-  it("renders a closed sidebar collapsed from the first render and keeps it closed", async () => {
-    flush(() => setSidebarOpen(false));
-    expect(sidebarPreference()).toBe(false);
-    render(() => <AppShell />);
-    const sidebar = screen.getByRole("complementary", { name: "Sidebar" });
-    expect(sidebar).toHaveAttribute("data-state", "collapsed");
-    expect(sidebar).toHaveAttribute("data-collapsible", "icon");
-    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeInTheDocument();
-    await screen.findByRole("textbox", { name: "Markdown editor" });
-    flush();
-    expect(sidebarOpen()).toBe(false);
-    expect(sidebar).toHaveAttribute("data-state", "collapsed");
   });
 });

@@ -67,6 +67,14 @@ export function isDesktop(host: object | undefined = globalThis): boolean {
   return desktopBridge(host) !== null;
 }
 
+export function applyDesktopAttribute(
+  root: HTMLElement = document.documentElement,
+  bridge: DesktopBridge | null = desktopBridge(),
+): void {
+  if (bridge) root.dataset.desktop = bridge.platform;
+  else delete root.dataset.desktop;
+}
+
 export function revealLabel(platform: DesktopPlatform): string {
   if (platform === "darwin") return "Show in Finder";
   if (platform === "win32") return "Show in File Explorer";

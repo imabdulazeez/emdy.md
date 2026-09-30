@@ -13,12 +13,10 @@ import {
   pinDocument,
   pinnedDocumentIds,
   rememberDocument,
-  rememberSidebar,
   resetWorkspaceState,
   retainPins,
   retainPositions,
   savePosition,
-  sidebarPreference,
   unpinDocument,
 } from "./workspace";
 
@@ -33,13 +31,6 @@ describe("workspace state", () => {
     flush(() => rememberDocument("abc123"));
     expect(lastDocumentId()).toBe("abc123");
     expect(window.localStorage.getItem("emdy:workspace:last-document")).toBe('"abc123"');
-  });
-
-  it("remembers the sidebar state only once set", () => {
-    expect(sidebarPreference()).toBeNull();
-    flush(() => rememberSidebar(false));
-    expect(sidebarPreference()).toBe(false);
-    expect(window.localStorage.getItem("emdy:workspace:sidebar")).toBe("false");
   });
 
   it("validates document positions", () => {
@@ -145,13 +136,11 @@ describe("workspace state", () => {
   it("resets to defaults and clears storage", () => {
     flush(() => {
       rememberDocument("abc123");
-      rememberSidebar(true);
       savePosition("abc123", { line: 4 });
       pinDocument("abc123");
     });
     flush(() => resetWorkspaceState());
     expect(lastDocumentId()).toBeNull();
-    expect(sidebarPreference()).toBeNull();
     expect(documentPositions()).toEqual({});
     expect(pinnedDocumentIds()).toEqual([]);
     expect(window.localStorage.getItem("emdy:workspace:pinned")).toBeNull();

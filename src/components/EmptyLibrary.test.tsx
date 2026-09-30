@@ -70,9 +70,8 @@ describe("EmptyLibrary", () => {
   it("welcomes the user with the two ways to get a first document", () => {
     mount();
     expect(screen.getByRole("heading", { name: "Welcome to emdy", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("banner", { name: "Toolbar" })).toContainElement(
-      screen.getByRole("button", { name: "Hide sidebar" }),
-    );
+    expect(screen.getByRole("banner", { name: "Toolbar" })).toHaveAttribute("data-window-drag");
+    expect(screen.queryByRole("button", { name: /sidebar/ })).toBeNull();
     expect(screen.getByRole("button", { name: "New document" })).toHaveClass("button-primary");
     expect(screen.getByRole("button", { name: "Import documents…" })).toHaveClass("button-quiet");
     expect(screen.getByLabelText("Import documents file")).toBeInTheDocument();

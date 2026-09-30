@@ -1,12 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { flush } from "solid-js";
 import { storageKey } from "~/lib/storage/key-value";
 import { layoutMode, resetLayoutState, setLayoutMode } from "./layout";
 import {
-  SIDEBAR_BREAKPOINT,
-  defaultSidebarOpen,
   focusMode,
-  initialSidebarOpen,
   resetUiState,
   requestSearch,
   requestEditorFocus,
@@ -23,7 +20,7 @@ import {
   toggleShortcuts,
   toggleSidebar,
 } from "./ui";
-import { resetWorkspaceState, sidebarPreference } from "./workspace";
+import { resetWorkspaceState } from "./workspace";
 
 afterEach(() => {
   resetLayoutState();
@@ -32,60 +29,16 @@ afterEach(() => {
 });
 
 describe("ui state", () => {
-  it("opens the sidebar by default on wide screens only", () => {
-    expect(defaultSidebarOpen(SIDEBAR_BREAKPOINT)).toBe(true);
-    expect(defaultSidebarOpen(SIDEBAR_BREAKPOINT - 1)).toBe(false);
-  });
-
-  it("toggles the sidebar", () => {
-    expect(sidebarOpen()).toBe(true);
+  it("keeps the narrow-screen drawer shut until asked and never persists it", () => {
+    expect(sidebarOpen()).toBe(false);
     flush(toggleSidebar);
+    expect(sidebarOpen()).toBe(true);
+    flush(() => setSidebarOpen(false));
     expect(sidebarOpen()).toBe(false);
     flush(() => setSidebarOpen(true));
-    expect(sidebarOpen()).toBe(true);
-  });
-
-  it("remembers the sidebar state from wide viewports only", () => {
-    flush(() => setSidebarOpen(false, SIDEBAR_BREAKPOINT));
-    expect(sidebarPreference()).toBe(false);
-    flush(() => setSidebarOpen(true, SIDEBAR_BREAKPOINT - 1));
-    expect(sidebarOpen()).toBe(true);
-    expect(sidebarPreference()).toBe(false);
-    flush(toggleSidebar);
+    expect(window.localStorage.getItem(storageKey("workspace", "sidebar"))).toBeNull();
+    flush(resetUiState);
     expect(sidebarOpen()).toBe(false);
-  });
-
-  it("restores the remembered sidebar state on wide viewports and hides it on narrow ones", () => {
-    expect(initialSidebarOpen(SIDEBAR_BREAKPOINT)).toBe(true);
-    expect(initialSidebarOpen(SIDEBAR_BREAKPOINT - 1)).toBe(false);
-    flush(() => setSidebarOpen(false, SIDEBAR_BREAKPOINT));
-    expect(initialSidebarOpen(SIDEBAR_BREAKPOINT)).toBe(false);
-    expect(initialSidebarOpen(SIDEBAR_BREAKPOINT - 1)).toBe(false);
-    flush(() => resetWorkspaceState());
-    expect(initialSidebarOpen(SIDEBAR_BREAKPOINT)).toBe(true);
-  });
-
-  it("seeds the sidebar from storage and the viewport before anything renders", async () => {
-    const key = storageKey("workspace", "sidebar");
-    const width = window.innerWidth;
-    const load = async (stored: string | null, viewportWidth: number) => {
-      if (stored === null) window.localStorage.removeItem(key);
-      else window.localStorage.setItem(key, stored);
-      Object.defineProperty(window, "innerWidth", { value: viewportWidth, configurable: true });
-      vi.resetModules();
-      return (await import("./ui")).sidebarOpen();
-    };
-    try {
-      expect(await load(null, SIDEBAR_BREAKPOINT)).toBe(true);
-      expect(await load("false", SIDEBAR_BREAKPOINT)).toBe(false);
-      expect(await load("true", SIDEBAR_BREAKPOINT)).toBe(true);
-      expect(await load("42", SIDEBAR_BREAKPOINT)).toBe(true);
-      expect(await load(null, SIDEBAR_BREAKPOINT - 1)).toBe(false);
-      expect(await load("true", SIDEBAR_BREAKPOINT - 1)).toBe(false);
-    } finally {
-      window.localStorage.removeItem(key);
-      Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
-    }
   });
 
   it("toggles focus mode", () => {

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant desktop-mac (&:where([data-desktop="darwin"] *));
+
 @theme {
   /* Every face is a system font, so nothing is downloaded and the browser falls
      back per character for any script or emoji. Each stack lists the best native
@@ -401,4 +403,22 @@
   background: var(--color-surface);
   box-shadow: var(--shadow-sheet);
   border: 1px solid var(--color-border);
+}
+
+[data-desktop] [data-window-drag] {
+  -webkit-app-region: drag;
+}
+
+[data-desktop]
+  [data-window-drag]
+  :is(button, input, textarea, select, a, label, [role], [contenteditable], [tabindex]) {
+  -webkit-app-region: no-drag;
+}
+
+@media (width < 48rem) {
+  [data-desktop="darwin"] header[data-window-drag] {
+    height: 3.25rem;
+    padding-top: 0.5rem;
+    padding-left: 6rem;
+  }
 }

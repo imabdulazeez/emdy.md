@@ -97,3 +97,65 @@ jobs:
             playwright-report/
           if-no-files-found: ignore
           retention-days: 14
+
+  desktop:
+    name: Desktop tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read pnpm version
+        id: pnpm
+        shell: bash
+        run: echo "version=$(jq -r '.devEngines.packageManager.version' package.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache desktop spellcheck dictionaries
+        uses: actions/cache@v6
+        with:
+          path: node_modules/.cache/emdy-desktop
+          key: emdy-desktop-${{ hashFiles('node_modules/electron/checksums.json') }}
+
+      # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's
+      # sandbox needs; lift the AppArmor restriction rather than disabling
+      # the sandbox the app ships with.
+      - name: Allow the Chromium sandbox
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # Electron needs a display on Linux; xvfb-run provides a virtual one.
+      - name: Electron specs (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm test:desktop
+        env:
+          CI: "true"
+
+      - name: Electron specs
+        if: runner.os != 'Linux'
+        run: pnpm test:desktop
+        env:
+          CI: "true"
+
+      - name: Upload traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: desktop-results-${{ matrix.os }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14

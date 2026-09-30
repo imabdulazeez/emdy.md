@@ -1,6 +1,7 @@
 import { createEffect, Match, onSettled, Show, Switch } from "solid-js";
 import { runWhenIdle } from "~/lib/debounce";
 import { hasOpenComposerMenu } from "~/lib/editor/composer";
+import { matchesMediaQuery, MOBILE_MEDIA_QUERY } from "~/lib/media";
 import { getRenderClient } from "~/lib/preview/render-client";
 import { startPersistenceSync } from "~/lib/storage/persisted";
 import {
@@ -133,14 +134,16 @@ export default function AppShell() {
         event,
         {
           setLayout: setLayoutMode,
-          toggleSidebar,
+          toggleSidebar: () => {
+            if (matchesMediaQuery(MOBILE_MEDIA_QUERY)) toggleSidebar();
+          },
           toggleFocusMode,
           toggleShortcuts,
           toggleSettings: () => toggleSettings(),
           focusSearch: () => {
             setShortcutsOpen(false);
             setFocusMode(false);
-            setSidebarOpen(true);
+            if (matchesMediaQuery(MOBILE_MEDIA_QUERY)) setSidebarOpen(true);
             requestSearch();
           },
           createDocument: () => {

@@ -20,6 +20,7 @@ export default function TitleBar() {
     <header
       class="flex h-11 shrink-0 items-center gap-1 border-b border-border px-2 text-[13px]"
       aria-label="Toolbar"
+      data-window-drag
     >
       <SidebarTrigger />
       <div class="flex min-w-0 flex-1 items-center gap-2 pl-1">

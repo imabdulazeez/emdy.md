@@ -71,7 +71,7 @@ describe("SettingsPage", () => {
     expect(within(library).getByLabelText("Import documents file")).toBeInTheDocument();
     const storage = screen.getByRole("region", { name: "Storage" });
     expect(within(storage).getByTestId("storage-location")).toHaveTextContent("This browser");
-    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sidebar/ })).toBeNull();
     const back = screen.getByRole("button", { name: "Back to document" });
     await screen.findByRole("button", { name: "Back to document" });
     expect(back).toHaveFocus();

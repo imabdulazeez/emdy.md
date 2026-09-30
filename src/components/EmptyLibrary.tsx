@@ -23,7 +23,11 @@ export default function EmptyLibrary(props: EmptyLibraryProps) {
 
   return (
     <div class="flex min-h-0 flex-1 flex-col" data-testid="empty-library">
-      <header class="flex h-11 shrink-0 items-center px-2 text-[13px]" aria-label="Toolbar">
+      <header
+        class="flex h-11 shrink-0 items-center px-2 text-[13px]"
+        aria-label="Toolbar"
+        data-window-drag
+      >
         <SidebarTrigger />
       </header>
       <section

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { isNotFoundError } from "../storage/directory";
 import {
+  applyDesktopAttribute,
   DESKTOP_BRIDGE_KEY,
   desktopBridge,
   isDesktop,
@@ -23,6 +24,25 @@ describe("desktopBridge", () => {
     expect(desktopBridge(undefined)).toBeNull();
     expect(isDesktop({})).toBe(false);
     expect(isDesktop()).toBe(false);
+  });
+});
+
+describe("applyDesktopAttribute", () => {
+  it("marks the root with the desktop platform", () => {
+    const root = document.createElement("html");
+    applyDesktopAttribute(root, createMemoryBridge(null, { platform: "darwin" }));
+    expect(root.dataset.desktop).toBe("darwin");
+    applyDesktopAttribute(root, createMemoryBridge(null, { platform: "win32" }));
+    expect(root.dataset.desktop).toBe("win32");
+  });
+
+  it("leaves the root unmarked in the browser", () => {
+    const root = document.createElement("html");
+    root.dataset.desktop = "darwin";
+    applyDesktopAttribute(root, null);
+    expect(root.dataset.desktop).toBeUndefined();
+    applyDesktopAttribute();
+    expect(document.documentElement.dataset.desktop).toBeUndefined();
   });
 });
 

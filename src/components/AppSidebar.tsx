@@ -17,13 +17,6 @@ import {
   type DocumentListing,
 } from "~/state/document";
 import { editorApi } from "~/state/editor-api";
-import {
-  nextThemePreference,
-  setThemePreference,
-  THEME_LABELS,
-  themePreference,
-  type ThemePreference,
-} from "~/state/theme";
 import { closeSettings, openSettings, view } from "~/state/navigation";
 import { isPinned, pinDocument, pinnedDocumentIds, unpinDocument } from "~/state/workspace";
 import {
@@ -36,7 +29,7 @@ import { cn } from "~/lib/utils";
 import DocumentIcon from "./DocumentIcon";
 import DocumentIconPicker from "./DocumentIconPicker";
 import Logo from "./Logo";
-import { Icon, type IconName } from "./icons";
+import { Icon } from "./icons";
 import ThemeToggle from "./ThemeToggle";
 import {
   ContextMenu,
@@ -58,12 +51,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "./ui/sidebar";
-
-const THEME_ICONS: Record<ThemePreference, IconName> = {
-  light: "sun",
-  dark: "moon",
-  system: "monitor",
-};
 
 interface DocumentItemProps {
   doc: DocumentListing;
@@ -108,9 +95,8 @@ function DocumentItem(props: DocumentItemProps) {
               isActive={active()}
               aria-current={active() ? "page" : undefined}
               aria-label={props.doc.title}
-              tooltip={props.doc.title}
               class={cn(
-                "h-9 rounded-[10px] px-3 data-[active=true]:shadow-none group-has-[[data-sidebar=menu-action]]/menu-item:pr-14 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:px-0",
+                "h-9 rounded-[10px] px-3 data-[active=true]:shadow-none group-has-[[data-sidebar=menu-action]]/menu-item:pr-14",
                 props.excerpt && "h-auto min-h-9 py-1.5",
               )}
               onClick={() => props.onOpen(props.doc.id)}
@@ -227,12 +213,12 @@ export default function AppSidebar() {
     },
     { equals: (a, b) => sameSections(a, b, sameListing) },
   );
-  const searching = () => sidebar.expanded() && normalizeQuery(query()) !== "";
+  const searching = () => normalizeQuery(query()) !== "";
   const results = createMemo(() => searchDocuments(documents(), query()));
   const hasResults = () => results().titles.length > 0 || results().contents.length > 0;
 
   createEffect(
-    () => searchRequested() && sidebar.expanded(),
+    () => searchRequested() && (!sidebar.isMobile() || sidebar.open()),
     (ready) => {
       if (!ready || !takeSearchRequest()) return;
       setMenu(null);
@@ -420,15 +406,14 @@ export default function AppSidebar() {
       icon: pinnedNow ? "pin-off" : "pin",
       onSelect: () => setPinned(doc.id, !pinnedNow),
     });
-    if (sidebar.expanded())
-      items.push({
-        id: "delete",
-        label: "Delete…",
-        icon: "trash",
-        danger: true,
-        separated: true,
-        onSelect: () => setPendingDelete(doc.id),
-      });
+    items.push({
+      id: "delete",
+      label: "Delete…",
+      icon: "trash",
+      danger: true,
+      separated: true,
+      onSelect: () => setPendingDelete(doc.id),
+    });
     showMenu(event, doc.title, items);
   };
 
@@ -438,15 +423,18 @@ export default function AppSidebar() {
     ]);
 
   return (
-    <Sidebar aria-label="Sidebar" collapsible="icon">
-      <SidebarHeader class="relative h-[3.75rem] shrink-0 flex-row items-center gap-2 pr-3 pl-5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+    <Sidebar aria-label="Sidebar">
+      <SidebarHeader
+        class="relative h-[3.75rem] shrink-0 flex-row items-center gap-2 pr-3 pl-5 desktop-mac:pl-24"
+        data-window-drag
+      >
         <Logo class="size-6" />
-        <span class="min-w-0 flex-1 truncate text-[13px] font-bold tracking-tight text-text group-data-[collapsible=icon]:hidden">
+        <span class="min-w-0 flex-1 truncate text-[13px] font-bold tracking-tight text-text">
           emdy.md
         </span>
         <button
           type="button"
-          class="icon-button size-7 min-w-7 text-text-faint group-data-[collapsible=icon]:hidden"
+          class="icon-button size-7 min-w-7 text-text-faint"
           aria-label="Settings"
           title={shortcutTitle("Settings", shortcutKeys("settings"), mac)}
           aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("settings"), mac)}
@@ -459,7 +447,7 @@ export default function AppSidebar() {
         <button
           ref={(el) => (newDocumentButton = el)}
           type="button"
-          class="icon-button size-7 min-w-7 text-text-faint group-data-[collapsible=icon]:hidden"
+          class="icon-button size-7 min-w-7 text-text-faint"
           aria-label="New document"
           title={shortcutTitle("New document", shortcutKeys("new-document"), mac)}
           aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("new-document"), mac)}
@@ -468,42 +456,40 @@ export default function AppSidebar() {
           <Icon name="plus" size={15} />
         </button>
       </SidebarHeader>
-      <Show when={sidebar.expanded()}>
-        <div role="search" class="shrink-0 px-3 pb-2">
-          <div class="relative">
-            <Icon
-              name="search"
-              size={14}
-              class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-text-faint"
-            />
-            <input
-              ref={(el) => (searchInput = el)}
-              type="search"
-              aria-label="Search documents"
-              aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("search"), mac)}
-              title={shortcutTitle("Search documents", shortcutKeys("search"), mac)}
-              placeholder="Search"
-              autocomplete="off"
-              spellcheck={false}
-              class="h-8 w-full rounded-[10px] bg-surface-raised pr-8 pl-8 text-[12.5px] text-text outline-none placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-search-cancel-button]:appearance-none"
-              value={query()}
-              onInput={(event) => setQuery(event.currentTarget.value)}
-              onKeyDown={onSearchKeyDown}
-            />
-            <Show when={query()}>
-              <button
-                type="button"
-                class="icon-button absolute top-1/2 right-1 size-6 min-w-6 -translate-y-1/2 text-text-faint"
-                aria-label="Clear search"
-                title="Clear search"
-                onClick={() => setQuery("")}
-              >
-                <Icon name="close" size={13} />
-              </button>
-            </Show>
-          </div>
+      <div role="search" class="shrink-0 px-3 pb-2">
+        <div class="relative">
+          <Icon
+            name="search"
+            size={14}
+            class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-text-faint"
+          />
+          <input
+            ref={(el) => (searchInput = el)}
+            type="search"
+            aria-label="Search documents"
+            aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("search"), mac)}
+            title={shortcutTitle("Search documents", shortcutKeys("search"), mac)}
+            placeholder="Search"
+            autocomplete="off"
+            spellcheck={false}
+            class="h-8 w-full rounded-[10px] bg-surface-raised pr-8 pl-8 text-[12.5px] text-text outline-none placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-search-cancel-button]:appearance-none"
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={onSearchKeyDown}
+          />
+          <Show when={query()}>
+            <button
+              type="button"
+              class="icon-button absolute top-1/2 right-1 size-6 min-w-6 -translate-y-1/2 text-text-faint"
+              aria-label="Clear search"
+              title="Clear search"
+              onClick={() => setQuery("")}
+            >
+              <Icon name="close" size={13} />
+            </button>
+          </Show>
         </div>
-      </Show>
+      </div>
       <SidebarContent onContextMenu={libraryMenu}>
         <nav ref={(el) => (nav = el)} aria-label="Main" class="flex flex-col">
           <Show when={searching()}>
@@ -573,72 +559,28 @@ export default function AppSidebar() {
                     </li>
                   )}
                 </For>
-                <Show when={!sidebar.expanded()}>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      tooltip={shortcutTitle("New document", shortcutKeys("new-document"), mac)}
-                      aria-label="New document"
-                      aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("new-document"), mac)}
-                      class="text-text-faint hover:text-text"
-                      onClick={create}
-                    >
-                      <Icon name="plus" />
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </Show>
               </SidebarMenu>
             </SidebarGroup>
           </Show>
         </nav>
       </SidebarContent>
       <SidebarFooter class="px-3 py-2">
-        <Show
-          when={sidebar.expanded()}
-          fallback={
-            <>
-              <SidebarMenuButton
-                tooltip={shortcutTitle("Keyboard shortcuts", shortcutKeys("shortcuts"), mac)}
-                aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("shortcuts"), mac)}
-                aria-label="Keyboard shortcuts"
-                onClick={toggleShortcuts}
-              >
-                <Icon name="keyboard" />
-              </SidebarMenuButton>
-              <SidebarMenuButton
-                tooltip={shortcutTitle("Settings", shortcutKeys("settings"), mac)}
-                aria-label="Settings"
-                aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("settings"), mac)}
-                onClick={settings}
-              >
-                <Icon name="settings" />
-              </SidebarMenuButton>
-              <SidebarMenuButton
-                tooltip={`Theme: ${THEME_LABELS[themePreference()]}`}
-                aria-label={`Theme: ${THEME_LABELS[themePreference()]}. Switch theme`}
-                onClick={() => setThemePreference(nextThemePreference(themePreference()))}
-              >
-                <Icon name={THEME_ICONS[themePreference()]} />
-              </SidebarMenuButton>
-            </>
-          }
-        >
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-0.5">
-              <button
-                type="button"
-                class="icon-button gap-2 px-2 text-[12px]"
-                aria-label="Keyboard shortcuts"
-                title={shortcutTitle("Keyboard shortcuts", shortcutKeys("shortcuts"), mac)}
-                aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("shortcuts"), mac)}
-                onClick={toggleShortcuts}
-              >
-                <Icon name="keyboard" size={15} />
-                <span>Shortcuts</span>
-              </button>
-            </div>
-            <ThemeToggle />
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-0.5">
+            <button
+              type="button"
+              class="icon-button gap-2 px-2 text-[12px]"
+              aria-label="Keyboard shortcuts"
+              title={shortcutTitle("Keyboard shortcuts", shortcutKeys("shortcuts"), mac)}
+              aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("shortcuts"), mac)}
+              onClick={toggleShortcuts}
+            >
+              <Icon name="keyboard" size={15} />
+              <span>Shortcuts</span>
+            </button>
           </div>
-        </Show>
+          <ThemeToggle />
+        </div>
       </SidebarFooter>
       <ContextMenu state={menu()} onClose={() => setMenu(null)} />
       <Show when={iconTarget()} keyed>

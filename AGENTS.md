@@ -102,10 +102,10 @@ Every user-facing setting and every piece of restorable workspace state is persi
 
 Two registries sit on top of the adapter and have different lifecycles:
 
-| Registry    | Module                     | Holds                                                                                  | Settings page |
-| ----------- | -------------------------- | -------------------------------------------------------------------------------------- | ------------- |
-| Preferences | `src/state/preferences.ts` | Choices the user makes deliberately: theme, view, future options                       | Yes           |
-| Workspace   | `src/state/workspace.ts`   | Where the user was: last document, sidebar state, per-document cursor and reading line | No            |
+| Registry    | Module                     | Holds                                                                                     | Settings page |
+| ----------- | -------------------------- | ----------------------------------------------------------------------------------------- | ------------- |
+| Preferences | `src/state/preferences.ts` | Choices the user makes deliberately: theme, view, future options                          | Yes           |
+| Workspace   | `src/state/workspace.ts`   | Where the user was: last document, pinned documents, per-document cursor and reading line | No            |
 
 Rules:
 

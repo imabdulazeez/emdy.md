@@ -29,8 +29,6 @@ test("theme, view, sidebar, and last document survive a fresh visit", async ({ p
   await expect(page).toHaveURL(/#\/d\/reading-list-readng/);
   await page.keyboard.press("ControlOrMeta+3");
   await expect(page.getByRole("document", { name: "Preview", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Hide sidebar", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Show sidebar", exact: true })).toBeVisible();
 
   await page.goto("/");
   await expect(html).toHaveAttribute("data-theme", "dark");
@@ -42,7 +40,7 @@ test("theme, view, sidebar, and last document survive a fresh visit", async ({ p
     "data-layout",
     "reader",
   );
-  await expect(page.getByRole("button", { name: "Show sidebar", exact: true })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Sidebar", exact: true })).toBeVisible();
   await expect(page).toHaveURL(/#\/d\/reading-list-readng/);
   await expect(
     page
@@ -195,7 +193,6 @@ test("corrupt stored settings fall back to defaults without errors", async ({ pa
     localStorage.setItem("emdy:pref:font", '"papyrus"');
     localStorage.setItem("emdy:workspace:last-document", '"nope"');
     localStorage.setItem("emdy:workspace:positions", '{"welcom":{"anchor":"x"}}');
-    localStorage.setItem("emdy:workspace:sidebar", "42");
   });
   await seedLibrary(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -205,7 +202,7 @@ test("corrupt stored settings fall back to defaults without errors", async ({ pa
     "editor",
   );
   await expect(page).toHaveURL(/#\/d\/welcome-to-emdy-welcom/);
-  await expect(page.getByRole("button", { name: "Hide sidebar", exact: true })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Sidebar", exact: true })).toBeVisible();
   const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
   await expect(editor).toContainText("# Welcome to emdy");
   await editor.press("ControlOrMeta+Home");

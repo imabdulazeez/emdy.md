@@ -21,7 +21,7 @@ import {
 import { registerEditorApi, resetEditorApiState } from "~/state/editor-api";
 import { layoutMode, resetLayoutState, setLayoutMode } from "~/state/layout";
 import { resetLibraryState } from "~/state/library";
-import { resetThemeState, setThemePreference, themePreference } from "~/state/theme";
+import { resetThemeState } from "~/state/theme";
 import { resetNavigationState, view } from "~/state/navigation";
 import {
   requestSearch,
@@ -122,6 +122,11 @@ describe("AppSidebar", () => {
     expect(screen.queryByRole("button", { name: /Focus mode/ })).toBeNull();
   });
 
+  it("lets the desktop window be dragged by the sidebar header", () => {
+    mount();
+    expect(screen.getByText("emdy.md").parentElement).toHaveAttribute("data-window-drag");
+  });
+
   it("shows the title beside a generated icon for each document", () => {
     mount();
     for (const doc of TEST_DOCUMENTS) {
@@ -134,16 +139,6 @@ describe("AppSidebar", () => {
       expect(icon).toHaveAttribute("data-document-icon", "automatic");
       expect(icon).toHaveAttribute("aria-hidden", "true");
     }
-  });
-
-  it("keeps the document icon visible when collapsed to icons", () => {
-    mount();
-    const active = screen.getByRole("button", { name: TEST_DOCUMENTS[0].title });
-    expect(active.querySelector("[data-icon=file]")).toBeNull();
-    expect(active).toHaveClass(
-      "group-data-[collapsible=icon]:[&>:not(svg):not([data-document-icon])]:hidden",
-    );
-    expect(active.querySelector("[data-document-icon] text")?.textContent).toMatch(/^[A-Z]{2}$/);
   });
 
   it("lists every document with the active one marked", () => {
@@ -386,14 +381,21 @@ describe("AppSidebar", () => {
       expect(searchBox()).toHaveAttribute("title", "Search documents (Ctrl+P)");
     });
 
-    it("holds a search request until the sidebar expands", async () => {
-      flush(() => setSidebarOpen(false));
+    it("holds a search request until the mobile drawer opens", async () => {
+      window.matchMedia = (query) => {
+        const media = originalMatchMedia(query);
+        Object.defineProperty(media, "matches", { value: true });
+        return media;
+      };
       mount();
+      await Promise.resolve();
       flush(requestSearch);
       await Promise.resolve();
       expect(screen.queryByRole("searchbox")).toBeNull();
       expect(searchRequested()).toBe(true);
       flush(() => setSidebarOpen(true));
+      await screen.findByRole("dialog", { name: "Sidebar" });
+      await Promise.resolve();
       await Promise.resolve();
       expect(searchBox()).toHaveFocus();
       expect(searchRequested()).toBe(false);
@@ -419,13 +421,13 @@ describe("AppSidebar", () => {
       expect(searchBox()).toHaveFocus();
     });
 
-    it("hides the search field and results while collapsed to icons", async () => {
+    it("keeps the search field and results on the desktop whatever the drawer state", async () => {
       const user = userEvent.setup();
       mount();
       await user.type(searchBox(), "week");
       flush(() => setSidebarOpen(false));
-      expect(screen.queryByRole("searchbox")).toBeNull();
-      expect(screen.getByRole("list", { name: "Documents" })).toBeInTheDocument();
+      expect(searchBox()).toHaveValue("week");
+      expect(screen.getByRole("list", { name: "Search results" })).toBeInTheDocument();
     });
   });
 
@@ -637,35 +639,17 @@ describe("AppSidebar", () => {
     expect(title()).toBe("Untitled");
   });
 
-  it("collapses to icon buttons for shortcuts and theme when closed", async () => {
-    const user = userEvent.setup();
+  it("never collapses to an icon rail on the desktop", () => {
     mount();
     flush(() => setSidebarOpen(false));
-    expect(screen.queryByRole("group", { name: "Theme" })).toBeNull();
-    const [header, settings] = screen.getAllByRole("button", { name: "Settings" });
-    expect(header).toHaveClass("group-data-[collapsible=icon]:hidden");
-    expect(settings).toHaveAttribute("title", expect.stringMatching(/^Settings \((⌘,|Ctrl\+,)\)$/));
-    expect(settings).toHaveAttribute(
-      "aria-keyshortcuts",
-      expect.stringMatching(/^(Meta|Control)\+,$/),
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).not.toHaveAttribute(
+      "data-collapsible",
     );
-    expect(screen.queryByRole("button", { name: "Import documents" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Export all documents" })).toBeNull();
-    const shortcuts = screen.getByRole("button", { name: "Keyboard shortcuts" });
-    expect(shortcuts).toHaveAttribute(
-      "title",
-      expect.stringMatching(/^Keyboard shortcuts \((⌘\/|Ctrl\+\/)\)$/),
-    );
-    expect(shortcuts).toHaveAttribute(
-      "aria-keyshortcuts",
-      expect.stringMatching(/^(Meta|Control)\+\/$/),
-    );
-    const cycle = screen.getByRole("button", { name: "Theme: System. Switch theme" });
-    expect(cycle).toHaveAttribute("title", "Theme: System");
-    await user.click(cycle);
-    expect(themePreference()).toBe("light");
-    flush(() => setThemePreference("dark"));
-    expect(screen.getByRole("button", { name: "Theme: Dark. Switch theme" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Settings" })).toHaveLength(1);
+    expect(screen.getByRole("searchbox")).toBeInTheDocument();
+    expect(screen.getByText("emdy.md")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Switch theme/ })).toBeNull();
   });
 });
 
@@ -755,13 +739,13 @@ describe("AppSidebar context menus", () => {
     );
   });
 
-  it("leaves delete out of the menu while collapsed to icons", async () => {
+  it("offers delete on the desktop whatever the drawer state", async () => {
     const user = userEvent.setup();
     mount();
     flush(() => setSidebarOpen(false));
     await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
     await screen.findByRole("menu");
-    expect(menuItems()).toEqual(["Change icon…", "Pin"]);
+    expect(menuItems()).toEqual(["Change icon…", "Pin", "Delete…"]);
   });
 
   it("offers a new document when right-clicking the empty list area", async () => {

@@ -25,6 +25,7 @@ electronFuses:
   loadBrowserProcessSpecificV8Snapshot: false
   grantFileProtocolExtraPrivileges: false
 mac:
+  icon: icon-mac.png
   category: public.app-category.productivity
   target:
     - dmg
@@ -32,12 +33,14 @@ mac:
   hardenedRuntime: true
   darkModeSupport: true
 win:
+  icon: icon.png
   target:
     - nsis
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 linux:
+  icon: icon.png
   target:
     - AppImage
     - tar.gz

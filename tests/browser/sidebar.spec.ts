@@ -3,7 +3,6 @@ import { test, expect, seedLibrary } from "./fixtures";
 
 interface SidebarFrame {
   rail: boolean;
-  state: string | null;
   width: number | null;
   sheetLeft: number | null;
 }
@@ -29,7 +28,6 @@ async function recordFrames(page: Page): Promise<void> {
       if (rail || sheet) {
         frames.push({
           rail: rail !== null,
-          state: rail?.dataset.state ?? null,
           width: rail ? rail.getBoundingClientRect().width : null,
           sheetLeft: sheet ? sheet.getBoundingClientRect().left : null,
         });
@@ -47,7 +45,7 @@ const recordedFrames = async (page: Page) => {
   return page.evaluate(() => window.__sidebarFrames ?? []);
 };
 
-test("a collapsed sidebar paints collapsed from the first frame after a reload", async ({
+test("the desktop sidebar cannot collapse and paints at full width from the first frame", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -57,20 +55,16 @@ test("a collapsed sidebar paints collapsed from the first frame after a reload",
   const widthOf = async () => (await sidebar.boundingBox())!.width;
   const expanded = await widthOf();
   expect(expanded).toBeGreaterThan(200);
+  const sheetLeft = (await sheet.boundingBox())!.x;
+  await expect(page.getByRole("button", { name: /^(Hide|Show) sidebar$/ })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Hide sidebar", exact: true }).click();
-  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
-  await sidebar.evaluate((element) =>
-    Promise.all(element.getAnimations().map((animation) => animation.finished)),
-  );
-  const collapsed = await widthOf();
-  expect(collapsed).toBeGreaterThan(0);
-  expect(collapsed).toBeLessThan(80);
-  const collapsedSheetLeft = (await sheet.boundingBox())!.x;
+  await page.getByRole("textbox", { name: "Markdown editor", exact: true }).focus();
+  await page.keyboard.press("ControlOrMeta+Backslash");
+  await expect(sidebar).toBeVisible();
+  expect(await widthOf()).toBeCloseTo(expanded, 0);
 
   await recordFrames(page);
   await page.reload();
-  await expect(page.getByRole("button", { name: "Show sidebar", exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Markdown editor", exact: true })).toBeVisible();
 
   const frames = await recordedFrames(page);
@@ -78,15 +72,36 @@ test("a collapsed sidebar paints collapsed from the first frame after a reload",
   expect(painted.length, "the sidebar must be sampled while the app boots").toBeGreaterThan(0);
   expect(frames[0].rail, "the sidebar must exist in the first frame the sheet does").toBe(true);
   for (const [index, frame] of frames.entries()) {
-    expect(frame.state, `frame ${index} state`).toBe("collapsed");
-    expect(frame.width!, `frame ${index} sidebar width`).toBeCloseTo(collapsed, 0);
-    expect(frame.sheetLeft!, `frame ${index} sheet edge`).toBeCloseTo(collapsedSheetLeft, 0);
+    expect(frame.width!, `frame ${index} sidebar width`).toBeCloseTo(expanded, 0);
+    expect(frame.sheetLeft!, `frame ${index} sheet edge`).toBeCloseTo(sheetLeft, 0);
   }
-  expect(await widthOf()).toBeCloseTo(collapsed, 0);
+  await expect(page.getByRole("button", { name: /^(Hide|Show) sidebar$/ })).toHaveCount(0);
+});
+
+test("the narrow-screen drawer opens with Mod-\\ and shuts when the window widens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await seedLibrary(page);
+  const drawer = page.getByRole("dialog", { name: "Sidebar", exact: true });
+  const aside = page.getByRole("complementary", { name: "Sidebar", exact: true });
+  await expect(aside).toHaveCount(0);
+
+  await page.getByRole("textbox", { name: "Markdown editor", exact: true }).focus();
+  await page.keyboard.press("ControlOrMeta+Backslash");
+  await expect(drawer).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
 
   await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
-  await expect(sidebar).toHaveAttribute("data-state", "expanded");
-  await expect.poll(widthOf).toBeCloseTo(expanded, 0);
+  await expect(drawer).toBeVisible();
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await expect(drawer).toHaveCount(0);
+  await expect(aside).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(aside).toHaveCount(0);
+  await expect(drawer).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show sidebar", exact: true })).toBeVisible();
 });
 
 test("a phone never paints the desktop sidebar rail while booting", async ({ page }) => {

@@ -11,11 +11,10 @@ test("global shortcuts act from inside the editor without typing into the docume
   await editor.press("ControlOrMeta+Home");
   const original = await editor.innerText();
 
-  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  const sidebarWidth = (await sidebar.boundingBox())!.width;
   await page.keyboard.press("ControlOrMeta+Backslash");
-  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
-  await page.keyboard.press("ControlOrMeta+Backslash");
-  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await expect(sidebar).toBeVisible();
+  expect((await sidebar.boundingBox())!.width).toBe(sidebarWidth);
 
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+Shift+F");

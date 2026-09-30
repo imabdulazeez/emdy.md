@@ -23,6 +23,7 @@ export default function SettingsPage() {
       <header
         class="flex h-11 shrink-0 items-center gap-1 border-b border-border px-2 text-[13px]"
         aria-label="Settings toolbar"
+        data-window-drag
       >
         <SidebarTrigger />
         <button

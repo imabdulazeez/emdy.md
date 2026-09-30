@@ -43,12 +43,6 @@ const lastDocument = createPersistedSignal<string | null>({
     value === null || (typeof value === "string" && isDocumentId(value)),
 });
 
-const sidebar = createPersistedSignal<boolean | null>({
-  key: storageKey("workspace", "sidebar"),
-  fallback: null,
-  parse: (value): value is boolean | null => value === null || typeof value === "boolean",
-});
-
 const positions = createPersistedSignal<PositionMap>({
   key: storageKey("workspace", "positions"),
   fallback: {},
@@ -63,16 +57,11 @@ const pins = createPersistedSignal<PinnedList>({
 });
 
 export const lastDocumentId = lastDocument.value;
-export const sidebarPreference = sidebar.value;
 export const documentPositions = positions.value;
 export const pinnedDocumentIds = pins.value;
 
 export function rememberDocument(id: string): void {
   if (lastDocument.peek() !== id) lastDocument.set(id);
-}
-
-export function rememberSidebar(open: boolean): void {
-  if (sidebar.peek() !== open) sidebar.set(open);
 }
 
 export function documentPosition(id: string): DocumentPosition | undefined {
@@ -132,7 +121,6 @@ export function retainPins(ids: Iterable<string>): void {
 
 export function resetWorkspaceState(): void {
   lastDocument.reset();
-  sidebar.reset();
   positions.reset();
   pins.reset();
 }

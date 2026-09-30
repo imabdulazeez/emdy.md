@@ -39,6 +39,7 @@ import { createFolderAccess } from "./folder";
 import { applicationMenu } from "./menu";
 import { isAllowedRequest, isExternalUrl, isGrantedPermission } from "./network";
 import { createWriteLog, watchFolder } from "./watcher";
+import { windowChrome } from "./window-chrome";
 
 const development = !app.isPackaged;
 const devServerUrl = development ? (process.env.EMDY_DEV_SERVER_URL ?? null) : null;
@@ -225,7 +226,7 @@ function createWindow(): BrowserWindow {
     minHeight: 360,
     show: false,
     title: "emdy",
-    autoHideMenuBar: process.platform !== "darwin",
+    ...windowChrome(process.platform),
     webPreferences: {
       preload: join(appRoot, "preload.cjs"),
       contextIsolation: true,
