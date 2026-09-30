@@ -123,7 +123,7 @@ The live site runs on Cloudflare Workers, which serve only the files in `dist`. 
 
 ## 🤝 Contributing
 
-Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), then read [AGENTS.md](AGENTS.md) for the project's conventions on design, storage, shortcuts, and testing, and make sure `vp check` and `vp test` pass before opening a pull request.
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ## 📄 License
 
