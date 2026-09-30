@@ -11,6 +11,8 @@ import {
   hasDocuments,
   title,
 } from "~/state/document";
+import { createMemoryBridge } from "~/lib/desktop/memory-bridge";
+import { loadLibraryLocation, resetDesktopState } from "~/state/desktop";
 import { resetEditorApiState } from "~/state/editor-api";
 import { layoutMode, resetLayoutState, setLayoutMode } from "~/state/layout";
 import { resetLibraryState, startLibrary, useLibraryDirectory } from "~/state/library";
@@ -36,17 +38,35 @@ afterEach(() => {
   resetEditorApiState();
   resetLayoutState();
   resetUiState();
+  resetDesktopState();
 });
 
-function mount() {
+function mount(desktop?: boolean) {
   return render(() => (
     <SidebarProvider open={sidebarOpen()} onOpenChange={setSidebarOpen}>
-      <EmptyLibrary />
+      <EmptyLibrary desktop={desktop} />
     </SidebarProvider>
   ));
 }
 
 describe("EmptyLibrary", () => {
+  it("says documents live in this browser's storage on the web", () => {
+    mount(false);
+    expect(screen.getByText(/this browser’s storage/)).toBeInTheDocument();
+    expect(screen.queryByTestId("empty-library-folder")).toBeNull();
+  });
+
+  it("names the documents folder in the desktop app", async () => {
+    await loadLibraryLocation(
+      createMemoryBridge(null, { location: { path: "/Users/ada/Notes", name: "Notes" } }),
+    );
+    mount(true);
+    expect(screen.getByTestId("empty-library-folder")).toHaveTextContent(
+      "plain Markdown files in the Notes folder",
+    );
+    expect(screen.queryByText(/this browser’s storage/)).toBeNull();
+  });
+
   it("welcomes the user with the two ways to get a first document", () => {
     mount();
     expect(screen.getByRole("heading", { name: "Welcome to emdy", level: 1 })).toBeInTheDocument();

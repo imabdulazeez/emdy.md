@@ -1,18 +1,27 @@
-import { createSignal, Match, Switch } from "solid-js";
+import { createSignal, Match, Show, Switch } from "solid-js";
+import { desktopBridge, type DesktopBridge } from "~/lib/desktop/bridge";
+import { chooseLibraryFolder } from "~/state/desktop";
 import { libraryStatus, startLibrary } from "~/state/library";
 import { Icon } from "./icons";
 
-export default function LibraryGate() {
+export interface LibraryGateProps {
+  bridge?: DesktopBridge | null;
+}
+
+export default function LibraryGate(props: LibraryGateProps) {
+  const bridge = props.bridge === undefined ? desktopBridge() : props.bridge;
   const [busy, setBusy] = createSignal(false);
-  const retry = async () => {
+  const run = async (task: () => Promise<unknown>) => {
     if (busy()) return;
     setBusy(true);
     try {
-      await startLibrary();
+      await task();
     } finally {
       setBusy(false);
     }
   };
+  const retry = () => run(startLibrary);
+  const choose = () => run(() => chooseLibraryFolder(bridge));
   const status = libraryStatus;
 
   return (
@@ -45,6 +54,17 @@ export default function LibraryGate() {
                 <button type="button" class="button-primary" disabled={busy()} onClick={retry}>
                   Try again
                 </button>
+                <Show when={bridge}>
+                  <button
+                    type="button"
+                    class="button-quiet gap-1.5"
+                    disabled={busy()}
+                    onClick={choose}
+                  >
+                    <Icon name="folder" size={14} />
+                    Choose another folder…
+                  </button>
+                </Show>
               </div>
             </section>
           )}

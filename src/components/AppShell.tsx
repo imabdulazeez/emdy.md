@@ -12,6 +12,7 @@ import {
 } from "~/lib/shortcuts";
 import { pageTitle } from "~/lib/title";
 import { holdTransitions } from "~/lib/transitions";
+import { startDesktopSync } from "~/state/desktop";
 import { createDocument, docText, hasDocuments, title } from "~/state/document";
 import { layoutMode, setLayoutMode } from "~/state/layout";
 import { currentLibrary, libraryStatus, startLibrary, trackLibrary } from "~/state/library";
@@ -108,6 +109,7 @@ export default function AppShell() {
     if (!currentLibrary()) void startLibrary();
     const cancelRenderWarmup = runWhenIdle(() => void getRenderClient());
     const stopPersistence = startPersistenceSync(window);
+    const stopDesktopSync = startDesktopSync();
     const stopThemeWatch = watchSystemTheme(window);
     const mac = isMacPlatform();
 
@@ -161,6 +163,7 @@ export default function AppShell() {
     return () => {
       cancelRenderWarmup();
       stopPersistence();
+      stopDesktopSync();
       stopThemeWatch();
       window.removeEventListener("keydown", onKeyDown, true);
     };

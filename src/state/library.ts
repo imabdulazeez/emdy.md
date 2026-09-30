@@ -1,4 +1,5 @@
 import { createEffect, createSignal, flush, onCleanup, untrack } from "solid-js";
+import { desktopBridge } from "~/lib/desktop/bridge";
 import { downloadText } from "~/lib/download";
 import {
   ARCHIVE_MIME_TYPE,
@@ -8,6 +9,7 @@ import {
   type ArchiveDocument,
   type ImportSummary,
 } from "~/lib/storage/archive";
+import { createDesktopDirectory } from "~/lib/storage/desktop-directory";
 import { createOriginPrivateDirectory, type Directory } from "~/lib/storage/directory";
 import { clearJournal, writeJournal } from "~/lib/storage/journal";
 import { createLibrary, type Library, type LibraryRefresh } from "~/lib/storage/library";
@@ -44,7 +46,12 @@ const [importOutcome, setImportOutcome] = createSignal<ImportStatus | null>(null
 export const librarySaveError = saveError;
 export const importStatus = importOutcome;
 
-let source: DirectorySource = () => createOriginPrivateDirectory();
+export function defaultDirectorySource(host: object | undefined = globalThis): Promise<Directory> {
+  const bridge = desktopBridge(host);
+  return bridge ? createDesktopDirectory(bridge) : createOriginPrivateDirectory();
+}
+
+let source: DirectorySource = () => defaultDirectorySource();
 let library: Library | null = null;
 let tracked = new Map<string, DocumentRecord>();
 
@@ -97,6 +104,13 @@ export async function startLibrary(): Promise<void> {
   }
 }
 
+export async function reopenLibrary(): Promise<void> {
+  library = null;
+  resetLinkState();
+  tracked = new Map();
+  await startLibrary();
+}
+
 export async function flushLibrary(): Promise<void> {
   editorApi()?.flush();
   flush();
@@ -111,6 +125,14 @@ export async function refreshLibrary(): Promise<void> {
   const current = library;
   if (!current || untrack(status).kind !== "ready") return;
   await current.refresh((id) => findDocument(id)?.text);
+}
+
+export async function syncLibrary(): Promise<void> {
+  try {
+    await refreshLibrary();
+  } catch (error) {
+    setSaveError(describe(error));
+  }
 }
 
 function applyRefresh(result: LibraryRefresh): void {
@@ -142,7 +164,7 @@ export function trackLibrary(win: TrackingWindow = window): void {
 
   const onVisibility = () => {
     if (win.document.visibilityState === "hidden") void retryLibrarySave();
-    else void refreshLibrary().catch((error) => setSaveError(describe(error)));
+    else void syncLibrary();
   };
   const onPageHide = () => void retryLibrarySave();
   win.document.addEventListener("visibilitychange", onVisibility);

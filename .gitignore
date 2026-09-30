@@ -29,3 +29,6 @@ gitignore
 .DS_Store
 Thumbs.db
 .vitest/
+
+# Desktop build output
+/out

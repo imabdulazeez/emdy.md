@@ -1,6 +1,6 @@
 ## About This Project
 
-emdy.md is a local-first, beautiful, 100% local, and lightning-fast Markdown editor. Its design is inspired by local-first apps like jspaint: useful and instantly responsive. It is built with plain Solid 2 on the Vite+ toolchain.
+emdy.md is a local-first, beautiful, 100% local, and lightning-fast Markdown editor. Its design is inspired by local-first apps like jspaint: useful and instantly responsive. It is built with plain Solid 2 on the Vite+ toolchain, and ships both as a web app and as an Electron desktop app built from the same renderer (see "Desktop app").
 
 ## Core Principles
 
@@ -120,8 +120,8 @@ Rules:
 
 Documents are plain `<title>.md` files in a directory, never blobs in a database. The code that owns this lives in `src/lib/storage/` and is driven by `src/state/library.ts`.
 
-- `directory.ts` is the only file-system abstraction. `createHandleDirectory` wraps a `FileSystemDirectoryHandle`, `createOriginPrivateDirectory` opens the Origin Private File System root and asks for persistence, and `createMemoryDirectory` is the test double. Nothing else touches handles.
-- The Origin Private File System is the only storage. There is no folder picker, no storage selector, and no memory fallback in the running app: `state/library.ts` opens the OPFS root at startup, and a browser that has none is an error, not a silent downgrade. `useLibraryDirectory` swaps in a memory directory for tests and is the only reason another `Directory` implementation exists.
+- `directory.ts` defines the `Directory` interface and is the only place that touches handles. `createHandleDirectory` wraps a `FileSystemDirectoryHandle`, `createOriginPrivateDirectory` opens the Origin Private File System root and asks for persistence, and `createMemoryDirectory` is the test double. `desktop-directory.ts` implements the same interface over the desktop bridge.
+- In the browser, the Origin Private File System is the only storage. There is no folder picker, no storage selector, and no memory fallback: `defaultDirectorySource` in `state/library.ts` opens the OPFS root at startup, and a browser that has none is an error, not a silent downgrade. In the desktop app the same function opens the user's documents folder through the bridge instead (see "Desktop app"). `useLibraryDirectory` swaps in a memory directory for tests.
 - `filenames.ts` maps titles to safe filenames and back (forbidden characters, reserved names, NFC, byte cap, ` 2` suffixes). Renaming a document renames its file.
 - `catalog.ts` keeps `.emdy/index.json` beside the files. It is a rebuildable cache, not a source of truth: it keeps document ids stable across renames and moves, and carries each document's chosen icon (`icon`, omitted when automatic). Losing the catalog only resets icons to automatic. An invalid stored icon is dropped rather than invalidating the catalog, and an icon-only change is written straight away without changing `modified`. `reconcile` matches files by name, then by content hash for rename detection, mints ids for new files, and drops entries whose files are gone. A folder without a catalog opens as-is; an empty folder opens as an empty library, and the workspace shows the welcome sheet until the first document is created or imported.
 - `library.ts` batches writes with a 500 ms debounce, writes the catalog before the files so an interrupted commit never loses an id, and re-reads the folder on `visibilitychange` so edits from other apps appear. While the app has unsaved edits the app wins; a document changed both in the app and on disk gets a `(conflict)` copy.
@@ -129,6 +129,21 @@ Documents are plain `<title>.md` files in a directory, never blobs in a database
 - `archive.ts` defines the export file: plain JSON (`emdy-library`, version 1) holding every document's id, title, text, catalog stamps, and chosen icon, downloaded as `emdy-<date>.json`. Import goes through `library.import`, which merges against the folder on disk rather than memory: exact duplicates (same title and text) are skipped, free ids are kept so links survive, colliding ids are re-minted, and nothing already present is ever overwritten. Both `created` and `modified` carry over: the catalog's `modified` is the last write the app knows about, and a separate `synced` field records the file mtime last seen, which is what `reconcile` compares to detect outside edits.
 - Links between documents are plain relative Markdown links to the target's file (`[Title](Title%20file.md)`, `#slug` for a heading), built by `src/lib/markdown/document-links.ts`. `state/links.ts` resolves them by catalog file, then by title, and rewrites every link to a file the library renames, updating a label that still reads as the old title. The read-only preview is the editable preview's CodeMirror view locked by `readOnlyPreview`. In both previews, `followLinks` in `src/lib/editor/follow-links.ts` follows local links through the URL fragment: relative targets in table cells live in `data-href` (never `href`), read-only inline links render without an `href`, and middle-clicks on local links are prevented, so no click, middle-click, or new tab can request a path that names a document. External links keep a real `href` and open in a new tab. The Markdown-to-HTML worker now serves export only.
 - Never let a storage failure pass as an empty library. When the OPFS root cannot be opened or read, `LibraryGate` blocks the workspace with the failure message and a retry rather than starting the user on documents that will not be saved.
+
+## Desktop app
+
+The desktop app is an Electron shell around the unchanged renderer. Its code lives in `desktop/`; the renderer only ever sees it through the bridge the preload script exposes as `window.emdyDesktop` (`src/lib/desktop/bridge.ts`). `desktopBridge()` returns `null` in the browser, so every desktop branch in `src/` must also work, and be tested, without it.
+
+- **Loading.** The renderer is served from the privileged `app://emdy/` scheme by `protocol.handle` in `desktop/main.ts`, never from `file://` or a local server. `resolveAppRequest` in `desktop/app-url.ts` maps a request to a file and refuses anything that escapes the renderer or dictionary folders. Routing stays in the URL fragment, so the app only ever loads `app://emdy/`.
+- **Local-first enforcement.** `desktop/network.ts` is the desktop counterpart of the Playwright network guard: `session.webRequest` cancels every request that is not `app://emdy`, an in-memory URL, the dev server while developing, or an image the document embeds (parity with the web). The `Referer` header is stripped. Permissions are denied except clipboard writes and fullscreen. New windows are denied and `http(s)`/`mailto` links go to the system browser with `shell.openExternal`; nothing else is ever handed to the OS. The desktop build adds a Content-Security-Policy with the inline first-paint script's hash (`desktop/html.ts`); never add `'unsafe-eval'` or a remote origin to it.
+- **Hardening.** Keep `contextIsolation`, `sandbox`, and `nodeIntegration: false`. IPC handlers check the sender is the app document. The Electron fuses in `electron-builder.yml` disable `RunAsNode`, `NODE_OPTIONS`, and inspector flags, and enforce asar integrity; do not relax them. DevTools and the reload item exist only in development.
+- **Documents folder.** Documents are plain `.md` files in a real folder (`~/Documents/emdy` by default, `~/Documents/emdy-dev` while developing), laid out exactly like the OPFS library, including `.emdy/index.json`. The main process owns the folder path and stores it in `<userData>/desktop.json` (`desktop/config.ts`); the renderer can never name a path. `desktop/folder.ts` validates every name and path segment, writes through a staging file and rename, and maps Node errors to the DOMException names the storage layer expects (`NotFoundError` above all). Every folder call carries the session number returned by `open`; choosing another folder bumps it, so a library opened on the old folder can never write into the new one.
+- **Outside edits.** `desktop/watcher.ts` watches the folder, ignores the app's own recent writes and staging files, and asks the renderer to re-read; window focus does the same. `startDesktopSync` in `state/desktop.ts` wires both to `syncLibrary`.
+- **Closing.** The window's `close` is held by `desktop/close-guard.ts` until the renderer has flushed preferences and pending saves (or three seconds pass), so quitting straight after typing loses nothing. The `pagehide` journal remains as the second line of defence.
+- **Spellcheck.** macOS uses the system checker. On Windows and Linux Chromium would download Hunspell dictionaries from a Google CDN; instead `desktop/scripts/stage.ts` extracts dictionaries from Electron's own release archive (verified against `node_modules/electron/checksums.json`), and the main process copies them into `<userData>/Dictionaries` before Chromium looks. `EMDY_DICTIONARIES` selects languages at build time (`en-US,fr-FR`, `all`, or `none`; English by default). "Add to dictionary" stays in Chromium's local custom dictionary.
+- **Menus.** `desktop/menu.ts` gives every menu item an explicit accelerator, and `desktop/menu.test.ts` fails when one shadows a `SHORTCUTS` entry (only Undo and Redo may overlap, because they run the same command). Right-clicks in editable text get `desktop/context-menu.ts`; app chrome keeps using `ContextMenu`.
+- **Commands.** `pnpm dev:desktop` packs the main process and starts `vp dev --mode desktop`, which launches Electron on the dev server. `pnpm build:desktop` runs `vp build --mode desktop` (renderer into `out/desktop/app/renderer`), `vp pack` (main and preload from the `pack` block of `vite.config.ts`), and the staging script. `pnpm start:desktop` runs the built app. `pnpm package:desktop`, `package:mac`, `package:win`, and `package:linux` produce installers in `out/desktop/release`. `pnpm build` is still the web build.
+- **Tests.** Main-process modules are plain functions with colocated `desktop/**/*.test.ts` files; keep `desktop/main.ts` to wiring so it needs no test of its own. Electron specs live in `tests/desktop/` and run with `pnpm test:desktop`; like the browser suite, agents write them but do not run them. A change to the folder, watcher, close guard, or bridge needs an Electron spec that drives the real app.
 
 ## Testing Requirements
 
@@ -188,7 +203,7 @@ Add or update a Playwright test in the same change whenever you change one of th
 
 Agents write and update browser specs but do not run them. The user runs the browser suite manually. Every rule above about when a spec is required still applies: add or update the spec in the same change, even though you will not execute it.
 
-- Do not run `pnpm test:browser` or `playwright test`.
+- Do not run `pnpm test:browser`, `pnpm test:desktop`, or `playwright test`.
 - When you finish, list the browser specs you added or changed and the behaviour each asserts, so the user knows what to run. State plainly that they have not been run.
 - If a change could plausibly break an existing spec (a renamed label, a changed title, a moved control), search `tests/browser/` for the affected locator or text and update the spec rather than leaving it for the user to discover.
 
@@ -199,7 +214,7 @@ For reference, `pnpm test:browser` builds the app and manages a temporary previe
 - **While working:** `vp test watch` for the colocated tests.
 - **Before every commit:** the full Definition of Done below. The `vp staged` pre-commit hook only formats and lints staged files; it runs no tests, so a hook that passes says nothing about behaviour.
 - **Before every push:** the colocated suite in full against the whole working tree. The user runs the browser suite before merging.
-- **In CI:** `.github/workflows/ci.yml` runs both suites on every push to `main` and every pull request. One job runs `vp check` and `vp test`; the other installs Chromium and runs `pnpm test:browser` with `CI=true` (`forbidOnly`, two workers), uploading `test-results/` when it fails.
+- **In CI:** `.github/workflows/ci.yml` runs both suites on every push to `main` and every pull request. One job runs `vp check`, `vp test`, and `pnpm build:desktop`; the other installs Chromium and runs `pnpm test:browser` with `CI=true` (`forbidOnly`, two workers), uploading `test-results/` when it fails.
 
 Do not move the browser suite into the pre-commit hook. `vp build` builds the working tree rather than the index, so it would test unstaged changes and report on code that is not part of the commit.
 
@@ -238,4 +253,7 @@ The browser suite is not part of an agent's Definition of Done; the user runs it
 - `vite.config.ts` — Vite+ configuration (lint, fmt, test, plugins).
 - `playwright.config.ts` — browser suite configuration and temporary preview server.
 - `tests/browser/` — Playwright integration specs and shared network/error fixture.
+- `desktop/` — Electron main process, preload bridge, build plugins, and the staging script.
+- `electron-builder.yml` — desktop packaging, fuses, and installer targets.
+- `playwright.desktop.config.ts` and `tests/desktop/` — Electron specs.
 - `~/*` resolves to `src/*`.

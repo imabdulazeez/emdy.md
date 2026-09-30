@@ -1,12 +1,15 @@
 import { createSignal, onSettled, Show } from "solid-js";
+import { desktopBridge, type DesktopBridge } from "~/lib/desktop/bridge";
 import { formatBytes, storageUsage, type StorageUsage } from "~/lib/storage/estimate";
+import FolderSettings from "./FolderSettings";
 import { Icon } from "./icons";
 
 export interface StorageSettingsProps {
   usage?: () => Promise<StorageUsage | null>;
+  bridge?: DesktopBridge | null;
 }
 
-export default function StorageSettings(props: StorageSettingsProps) {
+function BrowserStorage(props: Pick<StorageSettingsProps, "usage">) {
   const [usage, setUsage] = createSignal<StorageUsage | null>(null);
 
   onSettled(() => {
@@ -37,5 +40,14 @@ export default function StorageSettings(props: StorageSettingsProps) {
         </Show>
       </div>
     </div>
+  );
+}
+
+export default function StorageSettings(props: StorageSettingsProps) {
+  const bridge = props.bridge === undefined ? desktopBridge() : props.bridge;
+  return (
+    <Show when={bridge} fallback={<BrowserStorage usage={props.usage} />}>
+      {(current) => <FolderSettings bridge={current()} />}
+    </Show>
   );
 }

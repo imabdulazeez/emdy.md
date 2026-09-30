@@ -1,3 +1,6 @@
+import { Show } from "solid-js";
+import { isDesktop } from "~/lib/desktop/bridge";
+import { libraryLocation } from "~/state/desktop";
 import { createDocument } from "~/state/document";
 import { requestEditorFocus } from "~/state/ui";
 import { Icon } from "./icons";
@@ -5,8 +8,13 @@ import ImportInput from "./ImportInput";
 import ImportStatus from "./ImportStatus";
 import { SidebarTrigger } from "./ui/sidebar";
 
-export default function EmptyLibrary() {
+export interface EmptyLibraryProps {
+  desktop?: boolean;
+}
+
+export default function EmptyLibrary(props: EmptyLibraryProps) {
   let input: HTMLInputElement | undefined;
+  const desktop = props.desktop ?? isDesktop();
 
   const create = () => {
     createDocument();
@@ -32,10 +40,21 @@ export default function EmptyLibrary() {
           <h1 id="empty-library-title" class="text-[17px] font-bold tracking-tight">
             Welcome to emdy
           </h1>
-          <p class="text-text-muted">
-            A quiet Markdown editor that keeps everything on this device. Your documents are plain
-            files in this browser’s storage, and nothing you write ever leaves it.
-          </p>
+          <Show
+            when={desktop}
+            fallback={
+              <p class="text-text-muted">
+                A quiet Markdown editor that keeps everything on this device. Your documents are
+                plain files in this browser’s storage, and nothing you write ever leaves it.
+              </p>
+            }
+          >
+            <p class="text-text-muted" data-testid="empty-library-folder">
+              A quiet Markdown editor that keeps everything on this device. Your documents are plain
+              Markdown files in the {libraryLocation()?.name ?? "documents"} folder, and nothing you
+              write ever leaves it.
+            </p>
+          </Show>
           <p class="text-text-muted">
             Start with a blank page, or bring documents over from another emdy with an export file.
           </p>

@@ -1,0 +1,44 @@
+appId: md.emdy.desktop
+productName: emdy
+copyright: Copyright © emdy.md contributors
+directories:
+  app: out/desktop/app
+  output: out/desktop/release
+  buildResources: desktop/resources
+files:
+  - "**/*"
+  - "!**/node_modules/**"
+extraResources:
+  - from: out/desktop/dictionaries
+    to: dictionaries
+asar: true
+npmRebuild: false
+nodeGypRebuild: false
+publish: null
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  grantFileProtocolExtraPrivileges: false
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  darkModeSupport: true
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target:
+    - AppImage
+    - tar.gz
+  category: Office

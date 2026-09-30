@@ -46,6 +46,15 @@ jobs:
       - name: Unit and component tests
         run: pnpm exec vp test
 
+      - name: Cache desktop spellcheck dictionaries
+        uses: actions/cache@v6
+        with:
+          path: node_modules/.cache/emdy-desktop
+          key: emdy-desktop-${{ hashFiles('node_modules/electron/checksums.json') }}
+
+      - name: Desktop build
+        run: pnpm build:desktop
+
   browser:
     name: Browser tests
     runs-on: ubuntu-latest
