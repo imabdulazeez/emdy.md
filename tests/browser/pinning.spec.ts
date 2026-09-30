@@ -99,3 +99,41 @@ test("deleting a pinned document removes its pin", async ({ page }) => {
   await expect(row(page, "Project ideas")).toHaveCount(0);
   await expect(group(page, "Pinned")).toHaveCount(0);
 });
+
+test("the row's pin button pins and unpins without overlapping the title or delete", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await seedLibrary(page);
+
+  await row(page, "Reading list").hover();
+  const pin = page.getByRole("button", { name: "Pin Reading list", exact: true });
+  const remove = page.getByRole("button", { name: "Delete Reading list", exact: true });
+  await expect(pin).toBeVisible();
+  await expect(remove).toBeVisible();
+  const pinBox = (await pin.boundingBox())!;
+  const removeBox = (await remove.boundingBox())!;
+  expect(pinBox.x + pinBox.width).toBeLessThanOrEqual(removeBox.x);
+  const title = row(page, "Reading list").getByText("Reading list", { exact: true });
+  const titleBox = (await title.boundingBox())!;
+  expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(pinBox.x);
+
+  await pin.click();
+  const unpin = page.getByRole("button", { name: "Unpin Reading list", exact: true });
+  await expect(unpin).toBeFocused();
+  await expect(
+    group(page, "Pinned").getByRole("button", { name: "Reading list", exact: true }),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect.poll(() => pinnedNames(page)).toEqual(["Reading list"]);
+
+  await row(page, "Reading list").hover();
+  await page.getByRole("button", { name: "Unpin Reading list", exact: true }).click();
+  await expect(group(page, "Pinned")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pin Reading list", exact: true })).toBeFocused();
+
+  await page.reload();
+  await expect(row(page, "Reading list")).toBeVisible();
+  await expect(group(page, "Pinned")).toHaveCount(0);
+});

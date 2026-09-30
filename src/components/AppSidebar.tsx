@@ -69,10 +69,12 @@ interface DocumentItemProps {
   doc: DocumentListing;
   excerpt?: SearchExcerpt;
   confirming: boolean;
+  pinned: boolean;
   /** Deletion is confirmed and the row is collapsing out of the list. */
   removing: boolean;
   onOpen(id: string): void;
   onRequestDelete(id: string): void;
+  onTogglePin(id: string, pin: boolean): void;
   onConfirmDelete(id: string, row: HTMLElement | undefined): void;
   onCancelDelete(): void;
   onContextMenu(event: MouseEvent | KeyboardEvent, doc: DocumentListing): void;
@@ -108,7 +110,7 @@ function DocumentItem(props: DocumentItemProps) {
               aria-label={props.doc.title}
               tooltip={props.doc.title}
               class={cn(
-                "h-9 rounded-[10px] px-3 data-[active=true]:shadow-none group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:px-0",
+                "h-9 rounded-[10px] px-3 data-[active=true]:shadow-none group-has-[[data-sidebar=menu-action]]/menu-item:pr-14 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:px-0",
                 props.excerpt && "h-auto min-h-9 py-1.5",
               )}
               onClick={() => props.onOpen(props.doc.id)}
@@ -134,6 +136,15 @@ function DocumentItem(props: DocumentItemProps) {
                 )}
               </Show>
             </SidebarMenuButton>
+            <SidebarMenuAction
+              data-pin-action=""
+              aria-label={`${props.pinned ? "Unpin" : "Pin"} ${props.doc.title}`}
+              title={props.pinned ? "Unpin" : "Pin"}
+              class="right-7.5"
+              onClick={() => props.onTogglePin(props.doc.id, !props.pinned)}
+            >
+              <Icon name={props.pinned ? "pin-off" : "pin"} />
+            </SidebarMenuAction>
             <SidebarMenuAction
               aria-label={`Delete ${props.doc.title}`}
               title="Delete"
@@ -323,11 +334,11 @@ export default function AppSidebar() {
     });
   };
 
-  const setPinned = (id: string, pin: boolean) => {
+  const setPinned = (id: string, pin: boolean, focus = "[data-sidebar=menu-button]") => {
     flush(() => (pin ? pinDocument(id) : unpinDocument(id)));
     Array.from(nav?.querySelectorAll<HTMLElement>("[data-document-row]") ?? [])
       .find((row) => row.dataset.documentId === id)
-      ?.querySelector<HTMLElement>("[data-sidebar=menu-button]")
+      ?.querySelector<HTMLElement>(focus)
       ?.focus();
   };
 
@@ -354,9 +365,11 @@ export default function AppSidebar() {
       doc={doc()}
       excerpt={excerpt?.()}
       confirming={pendingDelete() === doc().id}
+      pinned={pinnedDocumentIds().includes(doc().id)}
       removing={removing().has(doc().id)}
       onOpen={open}
       onRequestDelete={setPendingDelete}
+      onTogglePin={(id, pin) => setPinned(id, pin, "[data-pin-action]")}
       onConfirmDelete={confirmDelete}
       onCancelDelete={() => setPendingDelete(null)}
       onContextMenu={documentMenu}

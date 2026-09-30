@@ -1109,6 +1109,25 @@ describe("AppSidebar pinning", () => {
     await vi.waitFor(() => expect(screen.getByRole("button", { name: "Fresh" })).toHaveFocus());
   });
 
+  it("pins and unpins from the row's pin button and keeps focus on it", async () => {
+    const user = userEvent.setup();
+    mount();
+    const pin = screen.getByRole("button", { name: "Pin Recent" });
+    expect(pin).toHaveAttribute("title", "Pin");
+    await user.click(pin);
+    expect(pinnedDocumentIds()).toEqual(["bbb222"]);
+    expect(namesInGroup("Pinned")).toEqual(["Recent"]);
+    const unpin = screen.getByRole("button", { name: "Unpin Recent" });
+    expect(unpin).toHaveAttribute("title", "Unpin");
+    await vi.waitFor(() => expect(unpin).toHaveFocus());
+    await user.keyboard("{Enter}");
+    expect(pinnedDocumentIds()).toEqual([]);
+    expect(groupNames()).toEqual(["Today", "Yesterday", "Older"]);
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Pin Recent" })).toHaveFocus(),
+    );
+  });
+
   it("follows pins made elsewhere and renames within the Pinned group", () => {
     mount();
     flush(() => pinDocument("bbb222"));
