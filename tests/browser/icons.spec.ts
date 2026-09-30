@@ -93,8 +93,13 @@ test("an icon chosen from the right-click menu is saved beside the files and sur
 
   await reading().focus();
   await page.keyboard.press("Shift+F10");
+  await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
   await page.keyboard.press("End");
+  await expect(page.getByRole("menuitem", { name: "Pin", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowUp");
+  await expect(
+    page.getByRole("menuitem", { name: "Use automatic icon", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(reading().locator("[data-document-icon=automatic] text")).toHaveText("RL");
@@ -144,7 +149,9 @@ test("context menus stay on screen, open from the keyboard, and hand focus back"
   await expect(weekly).toBeFocused();
 
   await page.keyboard.press("Shift+F10");
+  await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
   await page.keyboard.press("End");
+  await expect(page.getByRole("menuitem", { name: "Delete…", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   const confirm = page.getByRole("group", { name: "Delete Weekly sync — product?", exact: true });
   await expect(confirm.getByRole("button", { name: "Delete", exact: true })).toBeFocused();

@@ -1,0 +1,72 @@
+name: Bug report
+description: Report broken behaviour, a regression, or lost data.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the report to one problem. Share a minimal Markdown sample, never your real documents or a library export.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: My report contains no private documents or personal data.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Raw Markdown
+        - Editable preview
+        - Read-only preview
+        - Sidebar and document library
+        - Import and export
+        - Settings and themes
+        - Keyboard shortcuts
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a document with the sample below
+        2. Switch to Editable preview
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample
+    attributes:
+      label: Minimal Markdown sample
+      render: markdown
+
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and OS
+      placeholder: Chrome 140 on macOS 26
+    validations:
+      required: true
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or video
