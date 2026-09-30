@@ -1,6 +1,6 @@
 appId: md.emdy.desktop
 productName: emdy
-copyright: Copyright © emdy.md contributors
+copyright: Copyright © emdy contributors
 directories:
   app: out/desktop/app
   output: out/desktop/release

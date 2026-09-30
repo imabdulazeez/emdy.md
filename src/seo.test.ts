@@ -52,7 +52,7 @@ describe("index.html metadata", () => {
     expect(types).toEqual(["WebSite", "WebApplication"]);
     for (const node of data["@graph"]) {
       expect(node.url).toBe(`${ORIGIN}/`);
-      expect(node.name).toBe("emdy.md");
+      expect(node.name).toBe("emdy");
       expect(node).not.toHaveProperty("aggregateRating");
       expect(node).not.toHaveProperty("review");
     }

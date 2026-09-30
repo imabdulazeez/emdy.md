@@ -1,6 +1,6 @@
 ## About This Project
 
-emdy.md is a local-first, beautiful, 100% local, and lightning-fast Markdown editor. Its design is inspired by local-first apps like jspaint: useful and instantly responsive. It is built with plain Solid 2 on the Vite+ toolchain, and ships both as a web app and as an Electron desktop app built from the same renderer (see "Desktop app").
+emdy is a local-first, beautiful, 100% local, and lightning-fast Markdown editor. Its design is inspired by local-first apps like jspaint: useful and instantly responsive. It is built with plain Solid 2 on the Vite+ toolchain, and ships both as a web app and as an Electron desktop app built from the same renderer (see "Desktop app").
 
 ## Core Principles
 

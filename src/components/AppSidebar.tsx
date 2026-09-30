@@ -486,7 +486,7 @@ export default function AppSidebar() {
       >
         <Logo class="size-6" />
         <span class="min-w-0 flex-1 truncate text-[13px] font-bold tracking-tight text-text">
-          emdy.md
+          emdy
         </span>
         <button
           type="button"

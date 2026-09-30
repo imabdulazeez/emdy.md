@@ -1,4 +1,4 @@
-# Contributing to emdy.md
+# Contributing to emdy
 
 Thanks for helping out.
 

@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        emdy.md runs entirely on the device. Ideas that need a server or a network request will not be accepted.
+        emdy runs entirely on the device. Ideas that need a server or a network request will not be accepted.
 
   - type: textarea
     id: problem

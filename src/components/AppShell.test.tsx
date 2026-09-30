@@ -278,7 +278,7 @@ describe("AppShell", () => {
 
   it("renders chrome and the editor by default", async () => {
     await mount();
-    expect(screen.getByText("emdy.md")).toBeInTheDocument();
+    expect(screen.getByText("emdy")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /sidebar/ })).toBeNull();
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
@@ -386,18 +386,18 @@ describe("AppShell", () => {
   it("names the browser tab after the active document", async () => {
     const user = userEvent.setup();
     await mount();
-    expect(document.title).toBe(`${title()} · emdy.md`);
+    expect(document.title).toBe(`${title()} · emdy`);
     flush(() => setTitle("Project Kickoff Notes"));
-    expect(document.title).toBe("Project Kickoff Notes · emdy.md");
+    expect(document.title).toBe("Project Kickoff Notes · emdy");
     const other = documents().find((doc) => doc.id !== activeDocumentId())!;
     await user.click(screen.getByRole("button", { name: other.title }));
-    expect(document.title).toBe(`${other.title} · emdy.md`);
+    expect(document.title).toBe(`${other.title} · emdy`);
     await user.keyboard("{Control>},{/Control}");
-    expect(document.title).toBe("Settings · emdy.md");
+    expect(document.title).toBe("Settings · emdy");
     await user.keyboard("{Escape}");
-    expect(document.title).toBe(`${other.title} · emdy.md`);
+    expect(document.title).toBe(`${other.title} · emdy`);
     for (const { id } of documents()) flush(() => deleteDocument(id));
-    expect(document.title).toBe("emdy.md · Private Markdown editor that runs in your browser");
+    expect(document.title).toBe("emdy · Private Markdown editor that runs in your browser");
   });
 
   it("jumps to document search with Mod-P from focus mode", async () => {
@@ -457,7 +457,7 @@ describe("AppShell", () => {
     await mount();
     await user.keyboard("{Control>}{Shift>}F{/Shift}{/Control}");
     expect(focusMode()).toBe(true);
-    expect(screen.queryByText("emdy.md")).toBeNull();
+    expect(screen.queryByText("emdy")).toBeNull();
     expect(screen.queryByRole("complementary", { name: "Sidebar" })).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Outline" })).toBeNull();
     expect(screen.queryByTestId("status-words")).toBeNull();
@@ -466,7 +466,7 @@ describe("AppShell", () => {
     await user.click(screen.getByRole("button", { name: "Exit focus mode" }));
     expect(focusMode()).toBe(false);
     expect(screen.queryByRole("button", { name: "Exit focus mode" })).toBeNull();
-    expect(screen.getByText("emdy.md")).toBeInTheDocument();
+    expect(screen.getByText("emdy")).toBeInTheDocument();
     await user.keyboard("{Control>}{Shift>}F{/Shift}{/Control}");
     expect(focusMode()).toBe(true);
     await user.keyboard("{Escape}");

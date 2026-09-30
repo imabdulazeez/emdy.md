@@ -113,18 +113,18 @@ describe("AppSidebar", () => {
   it("renders brand, the document list, and footer controls", () => {
     mount();
     expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
-    expect(screen.getByText("emdy.md")).toBeInTheDocument();
-    expect(screen.getByText("emdy.md").parentElement?.querySelector("svg[data-logo]")).toHaveClass(
+    expect(screen.getByText("emdy")).toBeInTheDocument();
+    expect(screen.getByText("emdy").parentElement?.querySelector("svg[data-logo]")).toHaveClass(
       "size-6",
     );
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.queryByText("Documents")).toBeNull();
-    expect(screen.getByText("emdy.md").parentElement).toContainElement(
+    expect(screen.getByText("emdy").parentElement).toContainElement(
       screen.getByRole("button", { name: "New document" }),
     );
     expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeInTheDocument();
-    expect(screen.getByText("emdy.md").parentElement).toContainElement(
+    expect(screen.getByText("emdy").parentElement).toContainElement(
       screen.getByRole("button", { name: "Settings" }),
     );
     expect(screen.queryByRole("button", { name: "Import documents" })).toBeNull();
@@ -136,7 +136,7 @@ describe("AppSidebar", () => {
 
   it("lets the desktop window be dragged by the sidebar header", () => {
     mount();
-    expect(screen.getByText("emdy.md").parentElement).toHaveAttribute("data-window-drag");
+    expect(screen.getByText("emdy").parentElement).toHaveAttribute("data-window-drag");
   });
 
   it("shows the title beside a generated icon for each document", () => {
@@ -675,7 +675,7 @@ describe("AppSidebar", () => {
     expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Settings" })).toHaveLength(1);
     expect(screen.getByRole("searchbox")).toBeInTheDocument();
-    expect(screen.getByText("emdy.md")).toBeVisible();
+    expect(screen.getByText("emdy")).toBeVisible();
     expect(screen.queryByRole("button", { name: /Switch theme/ })).toBeNull();
   });
 });

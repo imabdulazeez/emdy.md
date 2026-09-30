@@ -1,8 +1,8 @@
 <div align="center">
 
-<a href="https://emdy.md"><img src="public/logo.svg" alt="emdy.md logo" width="96" height="96"></a>
+<a href="https://emdy.md"><img src="public/logo.svg" alt="emdy logo" width="96" height="96"></a>
 
-# emdy.md
+# emdy
 
 **A beautiful, local-first Markdown editor that runs entirely in your browser.**
 

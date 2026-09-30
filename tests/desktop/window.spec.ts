@@ -29,7 +29,7 @@ test("the macOS title bar is part of the app and the window drags by its chrome"
   });
   expect(bounds.content.height).toBe(bounds.frame.height);
 
-  const header = page.getByText("emdy.md", { exact: true }).locator("..");
+  const header = page.getByText("emdy", { exact: true }).locator("..");
   const logo = header.locator("svg[data-logo]");
   const logoBox = await logo.boundingBox();
   expect(logoBox!.x).toBeGreaterThanOrEqual(92);
@@ -52,7 +52,7 @@ test("the macOS traffic lights stay aligned with the sidebar header at every zoo
   session = await launchDesktop(sandbox);
   const { page, app } = session;
 
-  const logo = page.getByText("emdy.md", { exact: true }).locator("..").locator("svg[data-logo]");
+  const logo = page.getByText("emdy", { exact: true }).locator("..").locator("svg[data-logo]");
   await expect(logo).toBeVisible();
 
   const zoom = (id: string) =>
