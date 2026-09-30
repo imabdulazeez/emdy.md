@@ -1,18 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { flush } from "solid-js";
+import { decodeStored } from "~/lib/storage/persisted";
 import {
   POSITION_WRITE_DELAY_MS,
   documentPosition,
   documentPositions,
   forgetPosition,
   isDocumentPosition,
+  isPinned,
+  isPinnedList,
   lastDocumentId,
+  pinDocument,
+  pinnedDocumentIds,
   rememberDocument,
   rememberSidebar,
   resetWorkspaceState,
+  retainPins,
   retainPositions,
   savePosition,
   sidebarPreference,
+  unpinDocument,
 } from "./workspace";
 
 afterEach(() => {
@@ -79,16 +86,75 @@ describe("workspace state", () => {
     expect(documentPositions()).toBe(before);
   });
 
+  it("starts with nothing pinned", () => {
+    expect(pinnedDocumentIds()).toEqual([]);
+    expect(isPinned("abc123")).toBe(false);
+  });
+
+  it("validates pinned lists", () => {
+    expect(isPinnedList([])).toBe(true);
+    expect(isPinnedList(["abc123", "def456"])).toBe(true);
+    expect(isPinnedList(["abc123", "abc123"])).toBe(false);
+    expect(isPinnedList(["not-an-id!"])).toBe(false);
+    expect(isPinnedList([1])).toBe(false);
+    expect(isPinnedList({ abc123: true })).toBe(false);
+    expect(isPinnedList(null)).toBe(false);
+  });
+
+  it("pins documents in the order they were pinned and writes them at once", () => {
+    flush(() => pinDocument("def456"));
+    flush(() => pinDocument("abc123"));
+    expect(pinnedDocumentIds()).toEqual(["def456", "abc123"]);
+    expect(isPinned("abc123")).toBe(true);
+    expect(JSON.parse(window.localStorage.getItem("emdy:workspace:pinned")!)).toEqual([
+      "def456",
+      "abc123",
+    ]);
+  });
+
+  it("ignores repeated pins, invalid ids, and unpinning what is not pinned", () => {
+    flush(() => pinDocument("abc123"));
+    const before = pinnedDocumentIds();
+    flush(() => pinDocument("abc123"));
+    flush(() => pinDocument("not-an-id!"));
+    flush(() => unpinDocument("def456"));
+    expect(pinnedDocumentIds()).toBe(before);
+  });
+
+  it("unpins and prunes pinned documents", () => {
+    flush(() => {
+      pinDocument("abc123");
+      pinDocument("def456");
+      pinDocument("ghi789");
+    });
+    flush(() => unpinDocument("abc123"));
+    expect(pinnedDocumentIds()).toEqual(["def456", "ghi789"]);
+    flush(() => retainPins(["ghi789"]));
+    expect(pinnedDocumentIds()).toEqual(["ghi789"]);
+    const before = pinnedDocumentIds();
+    flush(() => retainPins(["ghi789", "zzz999"]));
+    expect(pinnedDocumentIds()).toBe(before);
+  });
+
+  it("falls back to nothing pinned when the stored list is invalid", () => {
+    expect(decodeStored('["abc123","abc123"]', isPinnedList, [])).toEqual([]);
+    expect(decodeStored("not json", isPinnedList, [])).toEqual([]);
+    expect(decodeStored('["abc123"]', isPinnedList, [])).toEqual(["abc123"]);
+  });
+
   it("resets to defaults and clears storage", () => {
     flush(() => {
       rememberDocument("abc123");
       rememberSidebar(true);
       savePosition("abc123", { line: 4 });
+      pinDocument("abc123");
     });
     flush(() => resetWorkspaceState());
     expect(lastDocumentId()).toBeNull();
     expect(sidebarPreference()).toBeNull();
     expect(documentPositions()).toEqual({});
+    expect(pinnedDocumentIds()).toEqual([]);
+    expect(window.localStorage.getItem("emdy:workspace:pinned")).toBeNull();
     expect(window.localStorage.getItem("emdy:workspace:last-document")).toBeNull();
   });
 });

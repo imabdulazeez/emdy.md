@@ -51,6 +51,8 @@ const NAMES: IconName[] = [
   "ruler",
   "github",
   "arrow-up-right",
+  "pin",
+  "pin-off",
 ];
 
 describe("Icon", () => {

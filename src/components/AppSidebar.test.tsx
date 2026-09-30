@@ -11,6 +11,7 @@ import {
   docText,
   documents,
   loadDocuments,
+  openDocument,
   replaceDocument,
   resetDocumentState,
   saveDocumentText,
@@ -31,6 +32,7 @@ import {
   sidebarOpen,
   editorFocusRequested,
 } from "~/state/ui";
+import { pinDocument, pinnedDocumentIds, resetWorkspaceState } from "~/state/workspace";
 import { automaticDocumentIcon } from "~/lib/document-icon";
 import AppSidebar from "./AppSidebar";
 import { SidebarProvider, SidebarTrigger } from "./ui/sidebar";
@@ -57,6 +59,7 @@ afterEach(() => {
   resetLayoutState();
   resetThemeState();
   resetUiState();
+  resetWorkspaceState();
   resetDocumentState(TEST_DOCUMENTS);
   resetEditorApiState();
 });
@@ -326,6 +329,7 @@ describe("AppSidebar", () => {
 
     it("leaves Enter to the IME while composing", async () => {
       const user = userEvent.setup();
+      flush(() => openDocument("ccc333"));
       mount();
       const before = activeDocumentId();
       await user.type(searchBox(), "sync");
@@ -671,13 +675,13 @@ describe("AppSidebar context menus", () => {
 
   const menuItems = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
 
-  it("offers icon and delete actions for a document on right-click", async () => {
+  it("offers icon, pin, and delete actions for a document on right-click", async () => {
     const user = userEvent.setup();
     mount();
     const target = TEST_DOCUMENTS[1];
     await rightClick(user, screen.getByRole("button", { name: target.title }));
     expect(await screen.findByRole("menu", { name: target.title })).toBeInTheDocument();
-    expect(menuItems()).toEqual(["Change icon…", "Delete…"]);
+    expect(menuItems()).toEqual(["Change icon…", "Pin", "Delete…"]);
     expect(screen.getByRole("menuitem", { name: "Delete…" })).toHaveAttribute(
       "data-danger",
       "true",
@@ -730,7 +734,7 @@ describe("AppSidebar context menus", () => {
     await vi.waitFor(() => expect(button()).toHaveFocus());
 
     await rightClick(user, button());
-    expect(menuItems()).toEqual(["Change icon…", "Use automatic icon", "Delete…"]);
+    expect(menuItems()).toEqual(["Change icon…", "Use automatic icon", "Pin", "Delete…"]);
     await user.click(screen.getByRole("menuitem", { name: "Use automatic icon" }));
     expect(documents().find((doc) => doc.id === target.id)?.icon).toBeNull();
     expect(button().querySelector("[data-document-icon]")).toHaveAttribute(
@@ -757,7 +761,7 @@ describe("AppSidebar context menus", () => {
     flush(() => setSidebarOpen(false));
     await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
     await screen.findByRole("menu");
-    expect(menuItems()).toEqual(["Change icon…"]);
+    expect(menuItems()).toEqual(["Change icon…", "Pin"]);
   });
 
   it("offers a new document when right-clicking the empty list area", async () => {
@@ -1040,5 +1044,96 @@ describe("AppSidebar deletion motion", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(deleteDocument).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AppSidebar pinning", () => {
+  const rightClick = (user: ReturnType<typeof userEvent.setup>, target: Element) =>
+    user.pointer({ keys: "[MouseRight]", target });
+
+  beforeEach(() => {
+    flush(() =>
+      loadDocuments([
+        { id: "aaa111", title: "Fresh", text: "first", modified: daysAgo(0) },
+        { id: "bbb222", title: "Recent", text: "second", modified: daysAgo(1) },
+        { id: "ccc333", title: "Old", text: "third", modified: daysAgo(40) },
+      ]),
+    );
+  });
+
+  it("shows no Pinned heading while nothing is pinned", () => {
+    mount();
+    expect(groupNames()).toEqual(["Today", "Yesterday", "Older"]);
+  });
+
+  it("lists pinned documents first, in pin order, and out of their date groups", () => {
+    flush(() => {
+      pinDocument("ccc333");
+      pinDocument("aaa111");
+    });
+    mount();
+    expect(groupNames()).toEqual(["Pinned", "Yesterday"]);
+    expect(namesInGroup("Pinned")).toEqual(["Old", "Fresh"]);
+    expect(documentNames()).toEqual(["Old", "Fresh", "Recent"]);
+  });
+
+  it("pins from the context menu and keeps focus on the moved row", async () => {
+    const user = userEvent.setup();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: "Old" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Pin" }));
+    expect(pinnedDocumentIds()).toEqual(["ccc333"]);
+    expect(groupNames()).toEqual(["Pinned", "Today", "Yesterday"]);
+    expect(namesInGroup("Pinned")).toEqual(["Old"]);
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Old" })).toHaveFocus());
+  });
+
+  it("unpins from the keyboard menu and returns the row to its date group", async () => {
+    const user = userEvent.setup();
+    flush(() => pinDocument("aaa111"));
+    mount();
+    screen.getByRole("button", { name: "Fresh" }).focus();
+    await user.keyboard("{Shift>}{F10}{/Shift}");
+    await vi.waitFor(() =>
+      expect(screen.getByRole("menuitem", { name: "Change icon…" })).toHaveFocus(),
+    );
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Change icon…",
+      "Unpin",
+      "Delete…",
+    ]);
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(pinnedDocumentIds()).toEqual([]);
+    expect(groupNames()).toEqual(["Today", "Yesterday", "Older"]);
+    expect(namesInGroup("Today")).toEqual(["Fresh"]);
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Fresh" })).toHaveFocus());
+  });
+
+  it("follows pins made elsewhere and renames within the Pinned group", () => {
+    mount();
+    flush(() => pinDocument("bbb222"));
+    expect(namesInGroup("Pinned")).toEqual(["Recent"]);
+    flush(() => replaceDocument("bbb222", "Renamed", "second"));
+    expect(namesInGroup("Pinned")).toEqual(["Renamed"]);
+  });
+
+  it("drops the Pinned heading when its last document is deleted", async () => {
+    const user = userEvent.setup();
+    flush(() => pinDocument("bbb222"));
+    mount();
+    await user.click(screen.getByRole("button", { name: "Delete Recent" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(pinnedDocumentIds()).toEqual([]);
+    expect(groupNames()).toEqual(["Today", "Older"]);
+  });
+
+  it("leaves search results in match order regardless of pins", async () => {
+    const user = userEvent.setup();
+    flush(() => pinDocument("ccc333"));
+    mount();
+    await user.type(screen.getByRole("searchbox", { name: "Search documents" }), "r");
+    expect(screen.queryByText("Pinned")).toBeNull();
+    expect(namesInGroup("Titles")).toEqual(["Fresh", "Recent"]);
+    expect(namesInGroup("Contents")).toEqual(["Old"]);
   });
 });
