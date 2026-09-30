@@ -1,7 +1,9 @@
 import type { MenuItemConstructorOptions } from "electron";
+import type { ZoomDirection } from "./window-chrome";
 
 export interface MenuActions {
   revealLibrary: () => void;
+  zoom: (direction: ZoomDirection) => void;
 }
 
 export interface ShortcutChord {
@@ -122,9 +124,24 @@ export function applicationMenu(
             { type: "separator" },
           ] satisfies MenuItemConstructorOptions[])
         : []),
-      { role: "resetZoom", accelerator: "CmdOrCtrl+0" },
-      { role: "zoomIn", accelerator: "CmdOrCtrl+=" },
-      { role: "zoomOut", accelerator: "CmdOrCtrl+-" },
+      {
+        id: "zoom-reset",
+        label: "Actual Size",
+        accelerator: "CmdOrCtrl+0",
+        click: () => actions.zoom("reset"),
+      },
+      {
+        id: "zoom-in",
+        label: "Zoom In",
+        accelerator: "CmdOrCtrl+=",
+        click: () => actions.zoom("in"),
+      },
+      {
+        id: "zoom-out",
+        label: "Zoom Out",
+        accelerator: "CmdOrCtrl+-",
+        click: () => actions.zoom("out"),
+      },
       { type: "separator" },
       { role: "togglefullscreen", accelerator: mac ? "Control+Command+F" : "F11" },
     ],

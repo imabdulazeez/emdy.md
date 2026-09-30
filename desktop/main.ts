@@ -4,7 +4,6 @@ import {
   dialog,
   ipcMain,
   Menu,
-  net,
   protocol,
   session,
   shell,
@@ -12,17 +11,16 @@ import {
   type IpcMainInvokeEvent,
   type OpenDialogOptions,
 } from "electron";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   APP_ORIGIN,
   APP_SCHEME,
   APP_URL,
+  appResponse,
   DICTIONARY_PREFIX,
   devServerOrigin,
   isAppDocument,
-  resolveAppRequest,
   type AppRoots,
 } from "./app-url";
 import { developmentIcon } from "./app-icon";
@@ -40,7 +38,12 @@ import { createFolderAccess } from "./folder";
 import { applicationMenu } from "./menu";
 import { isAllowedRequest, isExternalUrl, isGrantedPermission } from "./network";
 import { createWriteLog, watchFolder } from "./watcher";
-import { windowChrome } from "./window-chrome";
+import {
+  nextZoomLevel,
+  syncTrafficLights,
+  windowChrome,
+  type ZoomDirection,
+} from "./window-chrome";
 
 const development = !app.isPackaged;
 const devServerUrl = development ? (process.env.EMDY_DEV_SERVER_URL ?? null) : null;
@@ -168,15 +171,9 @@ function registerIpc(): void {
 }
 
 function serveApp(): void {
-  protocol.handle(APP_SCHEME, async (request) => {
-    const file = resolveAppRequest(request.url, roots);
-    if (!file) return new Response("Not found", { status: 404 });
-    try {
-      return await net.fetch(pathToFileURL(file).toString());
-    } catch {
-      return new Response("Not found", { status: 404 });
-    }
-  });
+  protocol.handle(APP_SCHEME, (request) =>
+    appResponse(request.url, roots, (file) => readFile(file)),
+  );
 }
 
 function lockDownSession(): void {
@@ -219,6 +216,14 @@ function openExternally(url: string): void {
   if (isExternalUrl(url)) void shell.openExternal(url);
 }
 
+function zoomWindow(direction: ZoomDirection): void {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  if (!window) return;
+  const contents = window.webContents;
+  contents.setZoomLevel(nextZoomLevel(contents.getZoomLevel(), direction));
+  if (process.platform === "darwin") syncTrafficLights(window);
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
@@ -248,6 +253,10 @@ function createWindow(): BrowserWindow {
   guards.set(id, guard);
 
   window.once("ready-to-show", () => window.show());
+  if (process.platform === "darwin") {
+    contents.on("did-finish-load", () => syncTrafficLights(window));
+    window.on("leave-full-screen", () => syncTrafficLights(window));
+  }
   window.on("close", (event) => {
     if (contents.isDestroyed() || contents.isCrashed()) return;
     const finish = () =>
@@ -293,6 +302,7 @@ async function start(): Promise<void> {
     Menu.buildFromTemplate(
       applicationMenu(process.platform, development, {
         revealLibrary: () => void shell.openPath(libraryFolder),
+        zoom: zoomWindow,
       }),
     ),
   );

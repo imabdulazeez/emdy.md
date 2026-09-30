@@ -9,6 +9,7 @@ import {
   sameChord,
 } from "./menu";
 
+const ACTIONS = { revealLibrary: () => {}, zoom: () => {} };
 const PLATFORMS = ["darwin", "win32", "linux"] as const;
 const SAME_ACTION_ROLES = new Map([
   ["undo", "undo"],
@@ -70,7 +71,7 @@ describe("applicationMenu", () => {
   it.each(PLATFORMS)("never shadows a registered shortcut on %s", (platform) => {
     const mac = platform === "darwin";
     for (const development of [false, true]) {
-      const template = applicationMenu(platform, development, { revealLibrary: () => {} });
+      const template = applicationMenu(platform, development, ACTIONS);
       for (const { role, accelerator } of menuAccelerators(template)) {
         const chord = acceleratorChord(accelerator, mac);
         for (const shortcut of SHORTCUTS) {
@@ -87,7 +88,7 @@ describe("applicationMenu", () => {
   it.each(PLATFORMS)(
     "names every role's accelerator on %s so none falls back silently",
     (platform) => {
-      const template = applicationMenu(platform, true, { revealLibrary: () => {} });
+      const template = applicationMenu(platform, true, ACTIONS);
       const unkeyed = new Set(["about", "services", "unhide", "zoom", "front"]);
       if (platform === "win32") unkeyed.add("quit");
       for (const item of items(template)) {
@@ -99,22 +100,22 @@ describe("applicationMenu", () => {
   );
 
   it("keeps developer tools out of the shipped app", () => {
-    const shipped = items(applicationMenu("darwin", false, { revealLibrary: () => {} }));
+    const shipped = items(applicationMenu("darwin", false, ACTIONS));
     expect(shipped.some((item) => item.role === "toggleDevTools")).toBe(false);
     expect(shipped.some((item) => item.role === "reload")).toBe(false);
-    const dev = items(applicationMenu("darwin", true, { revealLibrary: () => {} }));
+    const dev = items(applicationMenu("darwin", true, ACTIONS));
     expect(dev.find((item) => item.role === "toggleDevTools")?.accelerator).toBe("F12");
   });
 
   it("offers the standard macOS app menu only on macOS", () => {
-    expect(applicationMenu("darwin", false, { revealLibrary: () => {} })[0].label).toBe("emdy");
-    expect(applicationMenu("win32", false, { revealLibrary: () => {} })[0].label).toBe("File");
+    expect(applicationMenu("darwin", false, ACTIONS)[0].label).toBe("emdy");
+    expect(applicationMenu("win32", false, ACTIONS)[0].label).toBe("File");
   });
 
   it("reveals the library folder from the File menu with the platform's wording", () => {
     const revealLibrary = vi.fn();
     const labels = PLATFORMS.map((platform) => {
-      const file = applicationMenu(platform, false, { revealLibrary }).find(
+      const file = applicationMenu(platform, false, { ...ACTIONS, revealLibrary }).find(
         (item) => item.label === "File",
       )!;
       const reveal = (file.submenu as MenuItemConstructorOptions[])[0];
@@ -127,5 +128,22 @@ describe("applicationMenu", () => {
       "Open Library Folder",
     ]);
     expect(revealLibrary).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(PLATFORMS)("zooms through the app so the window chrome can follow on %s", (platform) => {
+    const zoom = vi.fn();
+    const view = items(applicationMenu(platform, false, { ...ACTIONS, zoom })).find(
+      (item) => item.label === "View",
+    )!;
+    const entries = (view.submenu as MenuItemConstructorOptions[]).filter((item) =>
+      ["CmdOrCtrl+0", "CmdOrCtrl+=", "CmdOrCtrl+-"].includes(String(item.accelerator)),
+    );
+    expect(entries.map((item) => [item.id, item.role])).toEqual([
+      ["zoom-reset", undefined],
+      ["zoom-in", undefined],
+      ["zoom-out", undefined],
+    ]);
+    for (const item of entries) (item.click as () => void)();
+    expect(zoom.mock.calls).toEqual([["reset"], ["in"], ["out"]]);
   });
 });

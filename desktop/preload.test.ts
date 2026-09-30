@@ -6,6 +6,7 @@ const electron = vi.hoisted(() => {
   return {
     listeners,
     exposeInMainWorld: vi.fn(),
+    zoomFactor: 1,
     invoke: vi.fn(async (..._args: unknown[]) => ({ ok: true, value: null })),
     send: vi.fn(),
     on: vi.fn((channel: string, listener: (...args: unknown[]) => void) => {
@@ -23,6 +24,7 @@ const electron = vi.hoisted(() => {
 
 vi.mock("electron", () => ({
   contextBridge: { exposeInMainWorld: electron.exposeInMainWorld },
+  webFrame: { getZoomFactor: () => electron.zoomFactor },
   ipcRenderer: {
     invoke: electron.invoke,
     send: electron.send,
@@ -31,13 +33,16 @@ vi.mock("electron", () => ({
   },
 }));
 
-const { createBridge } = await import("./preload");
+const { createBridge, TRAFFIC_LIGHT_INSET_PROPERTY, watchTrafficLightInset } =
+  await import("./preload");
 const exposed = electron.exposeInMainWorld.mock.calls.slice();
 
 beforeEach(() => {
   electron.listeners.clear();
   electron.invoke.mockClear();
   electron.send.mockClear();
+  electron.zoomFactor = 1;
+  document.documentElement.style.removeProperty(TRAFFIC_LIGHT_INSET_PROPERTY);
 });
 
 describe("preload bridge", () => {
@@ -122,5 +127,38 @@ describe("preload bridge", () => {
 
   it("reports the platform the page runs on", () => {
     expect(["darwin", "win32", "linux"]).toContain(createBridge().platform);
+  });
+});
+
+describe("traffic light inset", () => {
+  const inset = () => document.documentElement.style.getPropertyValue(TRAFFIC_LIGHT_INSET_PROPERTY);
+
+  it("reserves the traffic lights' space in screen points and follows zoom changes", () => {
+    electron.zoomFactor = 0.8;
+    watchTrafficLightInset("darwin");
+    expect(inset()).toBe("120px");
+    electron.zoomFactor = 1.25;
+    window.dispatchEvent(new Event("resize"));
+    expect(inset()).toBe("76.8px");
+  });
+
+  it("waits for the document when the preload runs before it exists", () => {
+    const root = document.documentElement;
+    Object.defineProperty(document, "documentElement", { configurable: true, get: () => null });
+    try {
+      expect(() => watchTrafficLightInset("darwin")).not.toThrow();
+    } finally {
+      delete (document as { documentElement?: unknown }).documentElement;
+    }
+    expect(document.documentElement).toBe(root);
+    electron.zoomFactor = 0.5;
+    window.dispatchEvent(new Event("DOMContentLoaded"));
+    expect(inset()).toBe("192px");
+  });
+
+  it("leaves the page alone where the native frame is kept", () => {
+    watchTrafficLightInset("win32");
+    watchTrafficLightInset("linux");
+    expect(inset()).toBe("");
   });
 });

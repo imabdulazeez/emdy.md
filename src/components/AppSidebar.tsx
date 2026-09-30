@@ -425,7 +425,7 @@ export default function AppSidebar() {
   return (
     <Sidebar aria-label="Sidebar">
       <SidebarHeader
-        class="relative h-[3.75rem] shrink-0 flex-row items-center gap-2 pr-3 pl-5 desktop-mac:pl-24"
+        class="relative h-[3.75rem] shrink-0 flex-row items-center gap-2 pr-3 pl-5 desktop-mac:pl-[var(--traffic-light-inset,6rem)]"
         data-window-drag
       >
         <Logo class="size-6" />

@@ -1,7 +1,9 @@
 import { join } from "node:path";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   APP_URL,
+  appResponse,
+  contentType,
   devServerOrigin,
   isAppDocument,
   resolveAppRequest,
@@ -80,5 +82,54 @@ describe("isAppDocument", () => {
     expect(isAppDocument("http://localhost:5173/#/d/x", "http://localhost:5173")).toBe(true);
     expect(isAppDocument("http://localhost:5173/", null)).toBe(false);
     expect(isAppDocument("http://localhost:4000/", "http://localhost:5173")).toBe(false);
+  });
+});
+
+describe("contentType", () => {
+  it("names the type of every file the renderer ships", () => {
+    expect(contentType("/app/renderer/index.html")).toBe("text/html; charset=utf-8");
+    expect(contentType("/app/renderer/assets/index-abc.js")).toBe("text/javascript; charset=utf-8");
+    expect(contentType("/app/renderer/assets/index-abc.CSS")).toBe("text/css; charset=utf-8");
+    expect(contentType("/app/renderer/logo.svg")).toBe("image/svg+xml");
+  });
+
+  it("falls back to a binary type for anything else", () => {
+    expect(contentType("/app/dictionaries/en-US-10-1.bdic")).toBe("application/octet-stream");
+    expect(contentType("/app/renderer/README")).toBe("application/octet-stream");
+  });
+});
+
+describe("appResponse", () => {
+  const bytes = (text: string) => new TextEncoder().encode(text);
+
+  it("reads the resolved file itself instead of fetching a file URL", async () => {
+    const read = vi.fn(async () => bytes("<!doctype html>"));
+    const response = await appResponse(APP_URL, roots, read);
+    expect(read).toHaveBeenCalledWith(join(roots.renderer, "index.html"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(await response.text()).toBe("<!doctype html>");
+  });
+
+  it("serves scripts with a JavaScript type so module scripts load", async () => {
+    const response = await appResponse("app://emdy/assets/index-abc.js", roots, async () =>
+      bytes("export {};"),
+    );
+    expect(response.headers.get("Content-Type")).toBe("text/javascript; charset=utf-8");
+  });
+
+  it("answers 404 without reading when the request escapes the app", async () => {
+    const read = vi.fn(async () => bytes("secret"));
+    const response = await appResponse("app://emdy/..%2Fmain.mjs", roots, read);
+    expect(response.status).toBe(404);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 when the file cannot be read", async () => {
+    const response = await appResponse("app://emdy/assets/missing.js", roots, async () => {
+      throw Object.assign(new Error("missing"), { code: "ENOENT" });
+    });
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("Not found");
   });
 });

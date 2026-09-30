@@ -1,6 +1,9 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { unzipSync } from "fflate";
 import { dictionaryLanguage } from "../dictionaries.ts";
 
@@ -10,8 +13,13 @@ export const CACHE_DIR = join("node_modules", ".cache", "emdy-desktop");
 export const DICTIONARY_ARCHIVE = "hunspell_dictionaries.zip";
 export const DEFAULT_LANGUAGES: readonly string[] = ["en-US", "en-GB", "en-CA", "en-AU"];
 export const REQUIRED_APP_FILES = ["main.mjs", "preload.cjs", join("renderer", "index.html")];
+export const MAC_ICON_SOURCE = join("desktop", "resources", "icon-mac.png");
+export const MAC_ICON = join("out", "desktop", "icon.icns");
+export const MAC_ICON_SIZES: readonly number[] = [16, 32, 128, 256, 512];
 
 const LICENSE_FILE = /^COPYING/;
+
+type Run = (command: string, args: readonly string[]) => Promise<unknown>;
 
 type Fetch = (url: string) => Promise<Pick<Response, "ok" | "status" | "arrayBuffer">>;
 
@@ -168,9 +176,52 @@ export async function stageApp(root: string): Promise<void> {
   await writeFile(join(appDir, "package.json"), `${JSON.stringify(appManifest(pkg), null, 2)}\n`);
 }
 
+export function iconsetEntries(): { name: string; size: number }[] {
+  return MAC_ICON_SIZES.flatMap((size) => [
+    { name: `icon_${size}x${size}.png`, size },
+    { name: `icon_${size}x${size}@2x.png`, size: size * 2 },
+  ]);
+}
+
+export async function stageMacIcon(options: {
+  root: string;
+  workDir: string;
+  run: Run;
+}): Promise<string> {
+  const source = join(options.root, MAC_ICON_SOURCE);
+  if (!(await exists(source)))
+    throw new Error(`The mac icon source ${MAC_ICON_SOURCE} is missing.`);
+  const iconset = join(options.workDir, "icon.iconset");
+  await mkdir(iconset, { recursive: true });
+  for (const { name, size } of iconsetEntries())
+    await options.run("sips", [
+      "-z",
+      String(size),
+      String(size),
+      source,
+      "--out",
+      join(iconset, name),
+    ]);
+  const target = join(options.root, MAC_ICON);
+  await mkdir(dirname(target), { recursive: true });
+  await options.run("iconutil", ["-c", "icns", iconset, "-o", target]);
+  return target;
+}
+
+async function buildMacIcon(root: string): Promise<void> {
+  const workDir = await mkdtemp(join(tmpdir(), "emdy-icon-"));
+  const run = promisify(execFile);
+  try {
+    await stageMacIcon({ root, workDir, run: (command, args) => run(command, [...args]) });
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   const root = process.cwd();
   await stageApp(root);
+  if (process.platform === "darwin") await buildMacIcon(root);
   const staged = await stageDictionaries({
     root,
     languages: requestedLanguages(process.env.EMDY_DICTIONARIES),

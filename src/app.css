@@ -419,6 +419,6 @@
   [data-desktop="darwin"] header[data-window-drag] {
     height: 3.25rem;
     padding-top: 0.5rem;
-    padding-left: 6rem;
+    padding-left: var(--traffic-light-inset, 6rem);
   }
 }

@@ -1,14 +1,31 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webFrame } from "electron";
 import {
   DESKTOP_BRIDGE_KEY,
   type DesktopBridge,
   type DesktopPlatform,
 } from "../src/lib/desktop/bridge";
 import { CHANNELS } from "./channels";
+import { trafficLightInset } from "./window-chrome";
+
+export const TRAFFIC_LIGHT_INSET_PROPERTY = "--traffic-light-inset";
 
 function platform(): DesktopPlatform {
   const current = process.platform;
   return current === "darwin" || current === "win32" ? current : "linux";
+}
+
+export function syncTrafficLightInset(): void {
+  document.documentElement?.style.setProperty(
+    TRAFFIC_LIGHT_INSET_PROPERTY,
+    trafficLightInset(webFrame.getZoomFactor()),
+  );
+}
+
+export function watchTrafficLightInset(current: DesktopPlatform): void {
+  if (current !== "darwin") return;
+  syncTrafficLightInset();
+  window.addEventListener("DOMContentLoaded", syncTrafficLightInset, { once: true });
+  window.addEventListener("resize", syncTrafficLightInset);
 }
 
 export function createBridge(): DesktopBridge {
@@ -59,3 +76,4 @@ export function createBridge(): DesktopBridge {
 }
 
 contextBridge.exposeInMainWorld(DESKTOP_BRIDGE_KEY, createBridge());
+watchTrafficLightInset(platform());

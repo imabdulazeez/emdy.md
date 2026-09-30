@@ -8,14 +8,18 @@ import {
   CACHE_DIR,
   DEFAULT_LANGUAGES,
   DICTIONARY_DIR,
+  MAC_ICON,
+  MAC_ICON_SOURCE,
   appManifest,
   dictionaryArchiveUrl,
+  iconsetEntries,
   loadDictionaryArchive,
   requestedLanguages,
   selectDictionaries,
   sha256,
   stageApp,
   stageDictionaries,
+  stageMacIcon,
 } from "./stage";
 
 let root: string;
@@ -236,5 +240,53 @@ describe("stageApp", () => {
     await expect(stageApp(root)).rejects.toThrow(
       /missing preload\.cjs, renderer\/index\.html.*vp build --mode desktop/,
     );
+  });
+});
+
+describe("iconsetEntries", () => {
+  it("lists every size iconutil expects, each with its retina twin", () => {
+    expect(iconsetEntries()).toEqual([
+      { name: "icon_16x16.png", size: 16 },
+      { name: "icon_16x16@2x.png", size: 32 },
+      { name: "icon_32x32.png", size: 32 },
+      { name: "icon_32x32@2x.png", size: 64 },
+      { name: "icon_128x128.png", size: 128 },
+      { name: "icon_128x128@2x.png", size: 256 },
+      { name: "icon_256x256.png", size: 256 },
+      { name: "icon_256x256@2x.png", size: 512 },
+      { name: "icon_512x512.png", size: 512 },
+      { name: "icon_512x512@2x.png", size: 1024 },
+    ]);
+  });
+});
+
+describe("stageMacIcon", () => {
+  it("resizes the mac icon into an iconset and packs it with iconutil", async () => {
+    await mkdir(join(root, "desktop", "resources"), { recursive: true });
+    await writeFile(join(root, MAC_ICON_SOURCE), "png");
+    const workDir = join(root, "work");
+    const run = vi.fn(async () => undefined);
+    const target = await stageMacIcon({ root, workDir, run });
+    const iconset = join(workDir, "icon.iconset");
+    expect(target).toBe(join(root, MAC_ICON));
+    expect(run).toHaveBeenCalledTimes(iconsetEntries().length + 1);
+    expect(run).toHaveBeenNthCalledWith(1, "sips", [
+      "-z",
+      "16",
+      "16",
+      join(root, MAC_ICON_SOURCE),
+      "--out",
+      join(iconset, "icon_16x16.png"),
+    ]);
+    expect(run).toHaveBeenLastCalledWith("iconutil", ["-c", "icns", iconset, "-o", target]);
+    expect(await readdir(join(root, "out", "desktop"))).toEqual([]);
+  });
+
+  it("fails clearly when the icon source is missing", async () => {
+    const run = vi.fn(async () => undefined);
+    await expect(stageMacIcon({ root, workDir: join(root, "work"), run })).rejects.toThrow(
+      MAC_ICON_SOURCE,
+    );
+    expect(run).not.toHaveBeenCalled();
   });
 });
