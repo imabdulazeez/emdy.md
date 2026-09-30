@@ -34,10 +34,19 @@ mac:
   hardenedRuntime: false
   notarize: false
   darkModeSupport: true
+  fileAssociations:
+    - ext: [md, markdown]
+      name: Markdown document
+      role: Editor
+      rank: Default
 win:
   icon: icon.png
   target:
     - nsis
+  fileAssociations:
+    - ext: [md, markdown]
+      name: emdy.markdown
+      description: Markdown document
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
@@ -47,3 +56,6 @@ linux:
     - AppImage
     - tar.gz
   category: Office
+  mimeTypes:
+    - text/markdown
+    - text/x-markdown

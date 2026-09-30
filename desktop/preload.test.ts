@@ -7,6 +7,10 @@ const electron = vi.hoisted(() => {
     listeners,
     exposeInMainWorld: vi.fn(),
     zoomFactor: 1,
+    getPathForFile: vi.fn((file: { path?: string }) => {
+      if (file.path === undefined) throw new TypeError("Not a file");
+      return file.path;
+    }),
     invoke: vi.fn(async (..._args: unknown[]) => ({ ok: true, value: null })),
     send: vi.fn(),
     on: vi.fn((channel: string, listener: (...args: unknown[]) => void) => {
@@ -25,6 +29,7 @@ const electron = vi.hoisted(() => {
 vi.mock("electron", () => ({
   contextBridge: { exposeInMainWorld: electron.exposeInMainWorld },
   webFrame: { getZoomFactor: () => electron.zoomFactor },
+  webUtils: { getPathForFile: electron.getPathForFile },
   ipcRenderer: {
     invoke: electron.invoke,
     send: electron.send,
@@ -33,7 +38,7 @@ vi.mock("electron", () => ({
   },
 }));
 
-const { createBridge, TRAFFIC_LIGHT_INSET_PROPERTY, watchTrafficLightInset } =
+const { createBridge, pathsForFiles, TRAFFIC_LIGHT_INSET_PROPERTY, watchTrafficLightInset } =
   await import("./preload");
 const exposed = electron.exposeInMainWorld.mock.calls.slice();
 
@@ -50,7 +55,11 @@ describe("preload bridge", () => {
     expect(exposed).toEqual([
       [
         "emdyDesktop",
-        expect.objectContaining({ folder: expect.any(Object), library: expect.any(Object) }),
+        expect.objectContaining({
+          folder: expect.any(Object),
+          library: expect.any(Object),
+          files: expect.any(Object),
+        }),
       ],
     ]);
   });
@@ -82,11 +91,60 @@ describe("preload bridge", () => {
     await bridge.library.location();
     await bridge.library.choose();
     await bridge.library.reveal();
+    await bridge.library.revealFile("a.md");
     expect(electron.invoke.mock.calls).toEqual([
       [CHANNELS.libraryLocation],
       [CHANNELS.libraryChoose],
       [CHANNELS.libraryReveal],
+      [CHANNELS.libraryRevealFile, "a.md"],
     ]);
+  });
+
+  it("forwards opened file requests by id, never by path", async () => {
+    const bridge = createBridge();
+    const change = { title: "Notes", text: "text", base: "0", icon: null };
+    await bridge.files.list(["abc123"]);
+    await bridge.files.takeRequests();
+    await bridge.files.save("abc123", change);
+    await bridge.files.close("abc123");
+    await bridge.files.reveal("abc123");
+    expect(electron.invoke.mock.calls).toEqual([
+      [CHANNELS.filesList, ["abc123"]],
+      [CHANNELS.filesTake],
+      [CHANNELS.filesSave, "abc123", change],
+      [CHANNELS.filesClose, "abc123"],
+      [CHANNELS.filesReveal, "abc123"],
+    ]);
+  });
+
+  it("opens dropped files by the paths the browser attached to them", async () => {
+    const bridge = createBridge();
+    const dropped = [{ path: "/Users/ada/Notes.md" }, { path: "" }, {}] as unknown as File[];
+    await bridge.files.openDropped(dropped);
+    expect(electron.invoke.mock.calls).toEqual([[CHANNELS.filesOpen, ["/Users/ada/Notes.md"]]]);
+  });
+
+  it("sends nothing when the page hands over files without a path", async () => {
+    const bridge = createBridge();
+    expect(await bridge.files.openDropped([{}] as unknown as File[])).toBe(0);
+    expect(pathsForFiles("not a list")).toEqual([]);
+    expect(electron.invoke).not.toHaveBeenCalled();
+  });
+
+  it("reports open requests and outside edits to opened files until removed", () => {
+    const bridge = createBridge();
+    const requested = vi.fn();
+    const changed = vi.fn();
+    const stopRequests = bridge.files.onRequest(requested);
+    const stopChanges = bridge.files.onChange(changed);
+    electron.emit(CHANNELS.filesRequested);
+    electron.emit(CHANNELS.filesChanged);
+    stopRequests();
+    stopChanges();
+    electron.emit(CHANNELS.filesRequested);
+    electron.emit(CHANNELS.filesChanged);
+    expect(requested).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenCalledTimes(1);
   });
 
   it("reports folder changes until the listener is removed", () => {

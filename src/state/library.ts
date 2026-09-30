@@ -25,6 +25,17 @@ import {
 } from "./document";
 import { editorApi } from "./editor-api";
 import { followRenamedFiles, resetLinkState, useLinkCatalog } from "./links";
+import {
+  clearOpenedFileError,
+  closeOpenedFile,
+  flushOpenedFiles,
+  loadOpenedFiles,
+  openedFileError,
+  ownsDocument,
+  refreshOpenedFiles,
+  resetOpenedFileState,
+  saveOpenedFile,
+} from "./opened-files";
 
 export type LibraryStatus =
   | { kind: "loading" }
@@ -43,7 +54,7 @@ const [status, setStatus] = createSignal<LibraryStatus>({ kind: "loading" });
 const [saveError, setSaveError] = createSignal<string | null>(null);
 const [importOutcome, setImportOutcome] = createSignal<ImportStatus | null>(null);
 
-export const librarySaveError = saveError;
+export const librarySaveError = () => saveError() ?? openedFileError();
 export const importStatus = importOutcome;
 
 export function defaultDirectorySource(host: object | undefined = globalThis): Promise<Directory> {
@@ -54,8 +65,17 @@ export function defaultDirectorySource(host: object | undefined = globalThis): P
 let source: DirectorySource = () => defaultDirectorySource();
 let library: Library | null = null;
 let tracked = new Map<string, DocumentRecord>();
+const readyListeners = new Set<() => void>();
 
 export const libraryStatus = status;
+
+export function onLibraryReady(listener: () => void): () => void {
+  readyListeners.add(listener);
+  if (untrack(status).kind === "ready") listener();
+  return () => {
+    readyListeners.delete(listener);
+  };
+}
 
 export function useLibraryDirectory(next: DirectorySource): () => void {
   const previous = source;
@@ -88,11 +108,13 @@ async function open(directory: Directory): Promise<void> {
   });
   const loaded = await opened.load();
   library = opened;
-  const records = loadDocuments(loaded);
+  const outside = await loadOpenedFiles(loaded.map((doc) => doc.id));
+  const records = loadDocuments([...loaded, ...outside]);
   useLinkCatalog(opened);
   tracked = new Map(records.map((doc) => [doc.id, doc]));
   setSaveError(null);
   setStatus({ kind: "ready" });
+  for (const listener of readyListeners) listener();
 }
 
 export async function startLibrary(): Promise<void> {
@@ -107,6 +129,7 @@ export async function startLibrary(): Promise<void> {
 export async function reopenLibrary(): Promise<void> {
   library = null;
   resetLinkState();
+  resetOpenedFileState();
   tracked = new Map();
   await startLibrary();
 }
@@ -115,9 +138,13 @@ export async function flushLibrary(): Promise<void> {
   editorApi()?.flush();
   flush();
   const current = library;
-  if (!current) return;
+  if (!current) return flushOpenedFiles();
   writeJournal(current.dirtyDocuments());
-  await current.flush();
+  try {
+    await current.flush();
+  } finally {
+    await flushOpenedFiles();
+  }
   if (library === current && !current.pending()) clearJournal();
 }
 
@@ -130,6 +157,16 @@ export async function refreshLibrary(): Promise<void> {
 export async function syncLibrary(): Promise<void> {
   try {
     await refreshLibrary();
+  } catch (error) {
+    setSaveError(describe(error));
+  }
+  await syncOpenedFiles();
+}
+
+export async function syncOpenedFiles(): Promise<void> {
+  if (untrack(status).kind !== "ready") return;
+  try {
+    await refreshOpenedFiles();
   } catch (error) {
     setSaveError(describe(error));
   }
@@ -156,9 +193,15 @@ export function trackLibrary(win: TrackingWindow = window): void {
     const next = new Map<string, DocumentRecord>();
     for (const doc of list) {
       next.set(doc.id, doc);
-      if (previous.get(doc.id) !== doc) current.save(doc);
+      if (previous.get(doc.id) === doc) continue;
+      if (ownsDocument(doc.id)) saveOpenedFile(doc);
+      else current.save(doc);
     }
-    for (const id of previous.keys()) if (!next.has(id)) current.remove(id);
+    for (const id of previous.keys()) {
+      if (next.has(id)) continue;
+      if (ownsDocument(id)) closeOpenedFile(id);
+      else current.remove(id);
+    }
     tracked = next;
   });
 
@@ -179,6 +222,7 @@ export async function retryLibrarySave(): Promise<void> {
   try {
     await flushLibrary();
     setSaveError(null);
+    clearOpenedFileError();
   } catch (error) {
     setSaveError(describe(error));
   }
@@ -197,17 +241,19 @@ export async function exportLibrary(now: () => number = Date.now): Promise<Libra
   await flushLibrary();
   const current = library;
   const stamp = now();
-  const archived: ArchiveDocument[] = untrack(documents).map((doc) => {
-    const entry = current?.entry(doc.id);
-    return {
-      id: doc.id,
-      title: doc.title,
-      text: doc.text,
-      created: entry?.created ?? doc.modified,
-      modified: entry?.modified ?? doc.modified,
-      ...(doc.icon ? { icon: doc.icon } : {}),
-    };
-  });
+  const archived: ArchiveDocument[] = untrack(documents)
+    .filter((doc) => !ownsDocument(doc.id))
+    .map((doc) => {
+      const entry = current?.entry(doc.id);
+      return {
+        id: doc.id,
+        title: doc.title,
+        text: doc.text,
+        created: entry?.created ?? doc.modified,
+        modified: entry?.modified ?? doc.modified,
+        ...(doc.icon ? { icon: doc.icon } : {}),
+      };
+    });
   return { name: archiveFilename(stamp), text: serializeArchive(archived, stamp) };
 }
 
@@ -246,6 +292,7 @@ export function dismissImportStatus(): void {
 export function resetLibraryState(): void {
   library = null;
   resetLinkState();
+  resetOpenedFileState();
   setSaveError(null);
   setImportOutcome(null);
   tracked = new Map();

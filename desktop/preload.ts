@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webFrame } from "electron";
+import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 import {
   DESKTOP_BRIDGE_KEY,
   type DesktopBridge,
@@ -26,6 +26,28 @@ export function watchTrafficLightInset(current: DesktopPlatform): void {
   syncTrafficLightInset();
   window.addEventListener("DOMContentLoaded", syncTrafficLightInset, { once: true });
   window.addEventListener("resize", syncTrafficLightInset);
+}
+
+export function pathsForFiles(files: unknown): string[] {
+  if (!Array.isArray(files)) return [];
+  const paths: string[] = [];
+  for (const file of files) {
+    try {
+      const path = webUtils.getPathForFile(file as File);
+      if (path) paths.push(path);
+    } catch {
+      continue;
+    }
+  }
+  return paths;
+}
+
+function subscribe(channel: string, listener: () => void): () => void {
+  const handler = () => listener();
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.removeListener(channel, handler);
+  };
 }
 
 export function createBridge(): DesktopBridge {
@@ -56,13 +78,21 @@ export function createBridge(): DesktopBridge {
       location: () => ipcRenderer.invoke(CHANNELS.libraryLocation),
       choose: () => ipcRenderer.invoke(CHANNELS.libraryChoose),
       reveal: () => ipcRenderer.invoke(CHANNELS.libraryReveal),
-      onChange(listener) {
-        const handler = () => listener();
-        ipcRenderer.on(CHANNELS.libraryChanged, handler);
-        return () => {
-          ipcRenderer.removeListener(CHANNELS.libraryChanged, handler);
-        };
+      revealFile: (name) => ipcRenderer.invoke(CHANNELS.libraryRevealFile, name),
+      onChange: (listener) => subscribe(CHANNELS.libraryChanged, listener),
+    },
+    files: {
+      list: (taken) => ipcRenderer.invoke(CHANNELS.filesList, taken),
+      takeRequests: () => ipcRenderer.invoke(CHANNELS.filesTake),
+      async openDropped(files) {
+        const paths = pathsForFiles(files);
+        return paths.length > 0 ? ipcRenderer.invoke(CHANNELS.filesOpen, paths) : 0;
       },
+      save: (id, change) => ipcRenderer.invoke(CHANNELS.filesSave, id, change),
+      close: (id) => ipcRenderer.invoke(CHANNELS.filesClose, id),
+      reveal: (id) => ipcRenderer.invoke(CHANNELS.filesReveal, id),
+      onRequest: (listener) => subscribe(CHANNELS.filesRequested, listener),
+      onChange: (listener) => subscribe(CHANNELS.filesChanged, listener),
     },
     window: {
       onBeforeClose(listener) {

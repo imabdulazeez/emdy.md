@@ -9,7 +9,7 @@ import {
   sameChord,
 } from "./menu";
 
-const ACTIONS = { revealLibrary: () => {}, zoom: () => {} };
+const ACTIONS = { openFiles: () => {}, revealLibrary: () => {}, zoom: () => {} };
 const PLATFORMS = ["darwin", "win32", "linux"] as const;
 const SAME_ACTION_ROLES = new Map([
   ["undo", "undo"],
@@ -118,7 +118,9 @@ describe("applicationMenu", () => {
       const file = applicationMenu(platform, false, { ...ACTIONS, revealLibrary }).find(
         (item) => item.label === "File",
       )!;
-      const reveal = (file.submenu as MenuItemConstructorOptions[])[0];
+      const reveal = (file.submenu as MenuItemConstructorOptions[]).find(
+        (item) => item.id === "reveal-library",
+      )!;
       (reveal.click as () => void)();
       return reveal.label;
     });
@@ -128,6 +130,17 @@ describe("applicationMenu", () => {
       "Open Library Folder",
     ]);
     expect(revealLibrary).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(PLATFORMS)("opens Markdown files from the File menu on %s", (platform) => {
+    const openFiles = vi.fn();
+    const file = applicationMenu(platform, false, { ...ACTIONS, openFiles }).find(
+      (item) => item.label === "File",
+    )!;
+    const open = (file.submenu as MenuItemConstructorOptions[])[0];
+    expect(open).toMatchObject({ id: "open-files", label: "Open…", accelerator: "CmdOrCtrl+O" });
+    (open.click as () => void)();
+    expect(openFiles).toHaveBeenCalledTimes(1);
   });
 
   it.each(PLATFORMS)("zooms through the app so the window chrome can follow on %s", (platform) => {

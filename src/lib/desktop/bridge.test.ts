@@ -5,6 +5,7 @@ import {
   DESKTOP_BRIDGE_KEY,
   desktopBridge,
   isDesktop,
+  revealFileLabel,
   revealLabel,
   unwrapFolderResult,
 } from "./bridge";
@@ -51,6 +52,14 @@ describe("revealLabel", () => {
     expect(revealLabel("darwin")).toBe("Show in Finder");
     expect(revealLabel("win32")).toBe("Show in File Explorer");
     expect(revealLabel("linux")).toBe("Open folder");
+  });
+});
+
+describe("revealFileLabel", () => {
+  it("names the action that shows a file in each platform's file manager", () => {
+    expect(revealFileLabel("darwin")).toBe("Reveal in Finder");
+    expect(revealFileLabel("win32")).toBe("Reveal in File Explorer");
+    expect(revealFileLabel("linux")).toBe("Open containing folder");
   });
 });
 

@@ -54,7 +54,7 @@ export class FolderFault extends Error {
   }
 }
 
-function errorCode(error: unknown): string | undefined {
+export function errorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" ? code : undefined;
@@ -93,6 +93,30 @@ async function settle<T>(subject: string, task: () => Promise<T>): Promise<Folde
     return { ok: true, value: await task() };
   } catch (error) {
     return { ok: false, error: describeFailure(error, subject) };
+  }
+}
+
+export function stagingName(counter: number): string {
+  return `.emdy-write-${process.pid}-${counter}.tmp`;
+}
+
+export async function writeStaged(
+  target: string,
+  staged: string,
+  text: string,
+  platform: NodeJS.Platform = process.platform,
+  mode?: number,
+): Promise<void> {
+  await writeFile(staged, text, mode === undefined ? "utf8" : { encoding: "utf8", mode });
+  try {
+    await rename(staged, target);
+  } catch (error) {
+    if (platform !== "win32" || !RETRY_IN_PLACE.has(errorCode(error) ?? "")) {
+      await rm(staged, { force: true });
+      throw error;
+    }
+    await writeFile(target, text, "utf8");
+    await rm(staged, { force: true });
   }
 }
 
@@ -178,23 +202,9 @@ export function createFolderAccess(options: FolderAccessOptions): FolderAccess {
         if (typeof text !== "string") throw invalid("Only text can be written.");
         const target = locate(session, path, name);
         const parts = segments(session, path);
-        const staged = join(
-          options.root(),
-          ...parts,
-          `.emdy-write-${process.pid}-${++temporary}.tmp`,
-        );
+        const staged = join(options.root(), ...parts, stagingName(++temporary));
         options.onWrite?.(parts, name as string);
-        await writeFile(staged, text, "utf8");
-        try {
-          await rename(staged, target);
-        } catch (error) {
-          if (platform !== "win32" || !RETRY_IN_PLACE.has(errorCode(error) ?? "")) {
-            await rm(staged, { force: true });
-            throw error;
-          }
-          await writeFile(target, text, "utf8");
-          await rm(staged, { force: true });
-        }
+        await writeStaged(target, staged, text, platform);
         return null;
       }),
     remove: (session, path, name) =>

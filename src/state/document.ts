@@ -21,6 +21,7 @@ export interface DocumentRecord {
   /** When the document was last written, in epoch milliseconds. */
   modified: number;
   icon: DocumentIcon | null;
+  fixedTitle?: boolean;
 }
 
 export type DocumentListing = Pick<DocumentRecord, "id" | "title" | "icon">;
@@ -39,6 +40,7 @@ export interface DocumentInput {
   text: string;
   modified?: number;
   icon?: DocumentIcon | null;
+  fixedTitle?: boolean;
 }
 
 export const EMPTY_DOCUMENT: DocumentRecord = {
@@ -74,7 +76,7 @@ const title = createMemo(() => activeDocument().title);
 const activeRevision = createMemo(() => activeDocument().revision);
 const titleIsAutomatic = createMemo(() => {
   const doc = activeDocument();
-  return doc.id !== "" && isAutomaticTitle(doc.title, doc.text);
+  return doc.id !== "" && !doc.fixedTitle && isAutomaticTitle(doc.title, doc.text);
 });
 const hasDocuments = createMemo(() => documents().length > 0);
 
@@ -97,7 +99,7 @@ export function normalizeTitle(value: string): string {
 }
 
 function followText(doc: DocumentRecord, text: string): string {
-  return isAutomaticTitle(doc.title, doc.text) ? deriveTitle(text) : doc.title;
+  return !doc.fixedTitle && isAutomaticTitle(doc.title, doc.text) ? deriveTitle(text) : doc.title;
 }
 
 function updateRecord(id: string, patch: (doc: DocumentRecord) => DocumentRecord): void {
@@ -116,6 +118,7 @@ function toRecords(records: readonly DocumentInput[]): DocumentRecord[] {
     revision: 0,
     modified: record.modified ?? now(),
     icon: record.icon ?? null,
+    ...(record.fixedTitle ? { fixedTitle: true } : {}),
   }));
 }
 

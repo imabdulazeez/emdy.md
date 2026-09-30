@@ -34,10 +34,11 @@ import {
 } from "./config";
 import { textContextMenu } from "./context-menu";
 import { pickSpellcheckLanguages, seedDictionaries } from "./dictionaries";
-import { createFolderAccess } from "./folder";
+import { createFolderAccess, isSafeSegment } from "./folder";
 import { applicationMenu } from "./menu";
 import { isAllowedRequest, isExternalUrl, isGrantedPermission } from "./network";
-import { createWriteLog, watchFolder } from "./watcher";
+import { createOpenedFiles, markdownPathsFromArgv, OPENED_FILES_STORE } from "./opened-files";
+import { createFolderWatchers, createWriteLog, watchFolder } from "./watcher";
 import {
   nextZoomLevel,
   syncTrafficLights,
@@ -76,6 +77,8 @@ let libraryFolder = "";
 let librarySession = 1;
 let stopWatching: () => void = () => {};
 let quitting = false;
+let started = false;
+const waitingPaths: string[] = [];
 
 const folder = createFolderAccess({
   root: () => libraryFolder,
@@ -91,6 +94,50 @@ function configFile(): string {
 
 function broadcast(channel: string): void {
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send(channel);
+}
+
+const fileWatchers = createFolderWatchers({ onChange: () => broadcast(CHANNELS.filesChanged) });
+
+const openedFiles = createOpenedFiles({
+  store: join(app.getPath("userData"), OPENED_FILES_STORE),
+  libraryFolder: () => libraryFolder,
+  onWrite: (path) => fileWatchers.record(path),
+});
+
+async function afterFileChange<T>(task: Promise<T>): Promise<T> {
+  try {
+    return await task;
+  } finally {
+    fileWatchers.sync(openedFiles.folders());
+  }
+}
+
+async function openPaths(paths: readonly string[]): Promise<number> {
+  if (!started) {
+    waitingPaths.push(...paths);
+    return paths.length;
+  }
+  const count = await afterFileChange(openedFiles.open(paths));
+  if (count === 0) return 0;
+  const window = BrowserWindow.getAllWindows()[0] ?? createWindow();
+  if (window.isMinimized()) window.restore();
+  window.focus();
+  broadcast(CHANNELS.filesRequested);
+  return count;
+}
+
+async function chooseFiles(): Promise<void> {
+  const options: OpenDialogOptions = {
+    title: "Open Markdown files",
+    buttonLabel: "Open",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
+  };
+  const owner = BrowserWindow.getFocusedWindow();
+  const result = owner
+    ? await dialog.showOpenDialog(owner, options)
+    : await dialog.showOpenDialog(options);
+  if (!result.canceled) await openPaths(result.filePaths);
 }
 
 function watchLibrary(): void {
@@ -164,6 +211,20 @@ function registerIpc(): void {
   });
   handle(CHANNELS.libraryReveal, async () => {
     await shell.openPath(libraryFolder);
+  });
+  handle(CHANNELS.libraryRevealFile, (_event, name) => {
+    if (isSafeSegment(name)) shell.showItemInFolder(join(libraryFolder, name));
+  });
+  handle(CHANNELS.filesList, (_event, taken) => afterFileChange(openedFiles.list(taken)));
+  handle(CHANNELS.filesTake, () => openedFiles.takeRequests());
+  handle(CHANNELS.filesOpen, (_event, paths) =>
+    openPaths(Array.isArray(paths) ? paths.filter((path) => typeof path === "string") : []),
+  );
+  handle(CHANNELS.filesSave, (_event, id, change) => afterFileChange(openedFiles.save(id, change)));
+  handle(CHANNELS.filesClose, (_event, id) => afterFileChange(openedFiles.close(id)));
+  handle(CHANNELS.filesReveal, (_event, id) => {
+    const path = openedFiles.locate(id);
+    if (path) shell.showItemInFolder(path);
   });
   ipcMain.on(CHANNELS.closeReady, (event) => {
     if (isTrusted(event)) guards.get(event.sender.id)?.release();
@@ -297,16 +358,24 @@ async function start(): Promise<void> {
   serveApp();
   registerIpc();
   await loadLibraryFolder();
+  await openedFiles.load();
+  fileWatchers.sync(openedFiles.folders());
   await prepareSpellcheck();
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       applicationMenu(process.platform, development, {
+        openFiles: () => void chooseFiles(),
         revealLibrary: () => void shell.openPath(libraryFolder),
         zoom: zoomWindow,
       }),
     ),
   );
   createWindow();
+  started = true;
+  await openPaths([
+    ...markdownPathsFromArgv(process.argv, process.cwd()),
+    ...waitingPaths.splice(0),
+  ]);
 }
 
 app.on("web-contents-created", (_event, contents) => {
@@ -317,11 +386,16 @@ app.on("web-contents-created", (_event, contents) => {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, argv, workingDirectory) => {
+    void openPaths(markdownPathsFromArgv(argv, workingDirectory));
     const [window] = BrowserWindow.getAllWindows();
     if (!window) return;
     if (window.isMinimized()) window.restore();
     window.focus();
+  });
+  app.on("open-file", (event, path) => {
+    event.preventDefault();
+    void openPaths([path]);
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
@@ -332,7 +406,10 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", () => {
     quitting = true;
   });
-  app.on("will-quit", () => stopWatching());
+  app.on("will-quit", () => {
+    stopWatching();
+    fileWatchers.stop();
+  });
   start().catch((error: unknown) => {
     dialog.showErrorBox(
       "emdy couldn’t start",

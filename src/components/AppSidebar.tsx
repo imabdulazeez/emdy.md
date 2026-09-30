@@ -1,5 +1,6 @@
 import { Portal } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, flush, For, onCleanup, Show } from "solid-js";
+import { desktopBridge, revealFileLabel } from "~/lib/desktop/bridge";
 import { getFocusable } from "~/lib/focus-trap";
 import { collapseElement } from "~/lib/motion";
 import { groupByRecency, sameSections } from "~/lib/recency";
@@ -16,8 +17,10 @@ import {
   toListing,
   type DocumentListing,
 } from "~/state/document";
+import { revealDocument } from "~/state/desktop";
 import { editorApi } from "~/state/editor-api";
 import { closeSettings, openSettings, view } from "~/state/navigation";
+import { isOpenedFile, openedFileIds } from "~/state/opened-files";
 import { isPinned, pinDocument, pinnedDocumentIds, unpinDocument } from "~/state/workspace";
 import {
   requestEditorFocus,
@@ -57,6 +60,8 @@ interface DocumentItemProps {
   excerpt?: SearchExcerpt;
   confirming: boolean;
   pinned: boolean;
+  /** Opened from another folder: closing it leaves the file where it is. */
+  opened: boolean;
   /** Deletion is confirmed and the row is collapsing out of the list. */
   removing: boolean;
   onOpen(id: string): void;
@@ -131,13 +136,26 @@ function DocumentItem(props: DocumentItemProps) {
             >
               <Icon name={props.pinned ? "pin-off" : "pin"} />
             </SidebarMenuAction>
-            <SidebarMenuAction
-              aria-label={`Delete ${props.doc.title}`}
-              title="Delete"
-              onClick={() => props.onRequestDelete(props.doc.id)}
+            <Show
+              when={props.opened}
+              fallback={
+                <SidebarMenuAction
+                  aria-label={`Delete ${props.doc.title}`}
+                  title="Delete"
+                  onClick={() => props.onRequestDelete(props.doc.id)}
+                >
+                  <Icon name="trash" />
+                </SidebarMenuAction>
+              }
             >
-              <Icon name="trash" />
-            </SidebarMenuAction>
+              <SidebarMenuAction
+                aria-label={`Close ${props.doc.title}`}
+                title="Close"
+                onClick={() => props.onConfirmDelete(props.doc.id, row)}
+              >
+                <Icon name="close" />
+              </SidebarMenuAction>
+            </Show>
           </>
         }
       >
@@ -179,6 +197,7 @@ function DocumentItem(props: DocumentItemProps) {
 export default function AppSidebar() {
   const sidebar = useSidebar();
   const mac = isMacPlatform();
+  const bridge = desktopBridge();
   const [pendingDelete, setPendingDelete] = createSignal<string | null>(null);
   const [query, setQuery] = createSignal("");
   const [menu, setMenu] = createSignal<ContextMenuState | null>(null);
@@ -202,10 +221,25 @@ export default function AppSidebar() {
         a.length === b.length && a.every((doc, index) => sameListing(doc, b[index])),
     },
   );
+  const opened = createMemo(
+    () => {
+      const pins = new Set(pinnedDocumentIds());
+      const ids = openedFileIds();
+      return documents()
+        .filter((doc) => ids.has(doc.id) && !pins.has(doc.id))
+        .sort((a, b) => b.modified - a.modified)
+        .map(toListing);
+    },
+    {
+      equals: (a, b) =>
+        a.length === b.length && a.every((doc, index) => sameListing(doc, b[index])),
+    },
+  );
   const sections = createMemo(
     () => {
       const pins = new Set(pinnedDocumentIds());
-      const unpinned = documents().filter((doc) => !pins.has(doc.id));
+      const ids = openedFileIds();
+      const unpinned = documents().filter((doc) => !pins.has(doc.id) && !ids.has(doc.id));
       return groupByRecency(unpinned, (doc) => doc.modified, Date.now()).map((section) => ({
         ...section,
         items: section.items.map(toListing),
@@ -352,6 +386,7 @@ export default function AppSidebar() {
       excerpt={excerpt?.()}
       confirming={pendingDelete() === doc().id}
       pinned={pinnedDocumentIds().includes(doc().id)}
+      opened={isOpenedFile(doc().id)}
       removing={removing().has(doc().id)}
       onOpen={open}
       onRequestDelete={setPendingDelete}
@@ -406,14 +441,31 @@ export default function AppSidebar() {
       icon: pinnedNow ? "pin-off" : "pin",
       onSelect: () => setPinned(doc.id, !pinnedNow),
     });
-    items.push({
-      id: "delete",
-      label: "Delete…",
-      icon: "trash",
-      danger: true,
-      separated: true,
-      onSelect: () => setPendingDelete(doc.id),
-    });
+    if (bridge)
+      items.push({
+        id: "reveal",
+        label: revealFileLabel(bridge.platform),
+        icon: "folder",
+        onSelect: () => void revealDocument(doc.id, bridge),
+      });
+    if (isOpenedFile(doc.id)) {
+      const row = anchor?.closest<HTMLElement>("[data-document-row]") ?? undefined;
+      items.push({
+        id: "close",
+        label: "Close",
+        icon: "close",
+        separated: true,
+        onSelect: () => confirmDelete(doc.id, row),
+      });
+    } else
+      items.push({
+        id: "delete",
+        label: "Delete…",
+        icon: "trash",
+        danger: true,
+        separated: true,
+        onSelect: () => setPendingDelete(doc.id),
+      });
     showMenu(event, doc.title, items);
   };
 
@@ -540,6 +592,16 @@ export default function AppSidebar() {
                     <SidebarGroupLabel id="documents-pinned">Pinned</SidebarGroupLabel>
                     <SidebarMenu aria-labelledby="documents-pinned" class="gap-px">
                       <For each={pinned()} keyed={(doc) => doc.id}>
+                        {(doc) => renderItem(doc)}
+                      </For>
+                    </SidebarMenu>
+                  </li>
+                </Show>
+                <Show when={opened().length > 0}>
+                  <li>
+                    <SidebarGroupLabel id="documents-opened">Other folders</SidebarGroupLabel>
+                    <SidebarMenu aria-labelledby="documents-opened" class="gap-px">
+                      <For each={opened()} keyed={(doc) => doc.id}>
                         {(doc) => renderItem(doc)}
                       </For>
                     </SidebarMenu>

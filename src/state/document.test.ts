@@ -456,6 +456,19 @@ describe("document state", () => {
       expect(title()).toBe("Hello");
     });
 
+    it("keeps a file's own title when its matching heading is edited", () => {
+      flush(() =>
+        addDocuments([
+          { id: "readme", title: "README", text: "# README\n\nIntro", fixedTitle: true },
+        ]),
+      );
+      flush(() => openDocument("readme"));
+      expect(titleIsAutomatic()).toBe(false);
+      flush(() => saveDocumentText("readme", "# README for emdy\n\nIntro"));
+      expect(title()).toBe("README");
+      expect(findDocument("readme")?.fixedTitle).toBe(true);
+    });
+
     it("returns to Untitled when the text is cleared, then follows again", () => {
       flush(() => createDocument());
       const id = activeDocumentId();

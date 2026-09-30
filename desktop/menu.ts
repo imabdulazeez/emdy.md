@@ -2,6 +2,7 @@ import type { MenuItemConstructorOptions } from "electron";
 import type { ZoomDirection } from "./window-chrome";
 
 export interface MenuActions {
+  openFiles: () => void;
   revealLibrary: () => void;
   zoom: (direction: ZoomDirection) => void;
 }
@@ -91,7 +92,14 @@ export function applicationMenu(
   const fileMenu: MenuItemConstructorOptions = {
     label: "File",
     submenu: [
-      { label: reveal, click: () => actions.revealLibrary() },
+      {
+        id: "open-files",
+        label: "Open…",
+        accelerator: "CmdOrCtrl+O",
+        click: () => actions.openFiles(),
+      },
+      { type: "separator" },
+      { id: "reveal-library", label: reveal, click: () => actions.revealLibrary() },
       { type: "separator" },
       mac
         ? { role: "close", accelerator: "Command+W" }

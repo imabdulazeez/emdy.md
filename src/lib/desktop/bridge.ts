@@ -1,3 +1,4 @@
+import type { DocumentIcon } from "../document-icon";
 import type { FileInfo } from "../storage/directory";
 
 export const DESKTOP_BRIDGE_KEY = "emdyDesktop";
@@ -41,6 +42,45 @@ export interface LibraryFolderApi {
   location: () => Promise<LibraryLocation>;
   choose: () => Promise<LibraryLocation | null>;
   reveal: () => Promise<void>;
+  revealFile: (name: string) => Promise<void>;
+  onChange: (listener: () => void) => () => void;
+}
+
+export interface OpenedFile {
+  id: string;
+  name: string;
+  text: string;
+  modified: number;
+  icon: DocumentIcon | null;
+}
+
+export interface OpenedFileList {
+  files: OpenedFile[];
+  missing: string[];
+}
+
+export type OpenRequest = { kind: "file"; id: string } | { kind: "library"; name: string };
+
+export interface OpenedFileChange {
+  title: string;
+  text: string;
+  base: string;
+  icon: DocumentIcon | null;
+}
+
+export interface OpenedFileSaved {
+  file: OpenedFile;
+  conflict: OpenedFile | null;
+}
+
+export interface OpenedFilesApi {
+  list: (taken: readonly string[]) => Promise<FolderResult<OpenedFileList>>;
+  takeRequests: () => Promise<OpenRequest[]>;
+  openDropped: (files: readonly File[]) => Promise<number>;
+  save: (id: string, change: OpenedFileChange) => Promise<FolderResult<OpenedFileSaved>>;
+  close: (id: string) => Promise<void>;
+  reveal: (id: string) => Promise<void>;
+  onRequest: (listener: () => void) => () => void;
   onChange: (listener: () => void) => () => void;
 }
 
@@ -54,6 +94,7 @@ export interface DesktopBridge {
   platform: DesktopPlatform;
   folder: FolderApi;
   library: LibraryFolderApi;
+  files: OpenedFilesApi;
   window: WindowApi;
 }
 
@@ -79,6 +120,12 @@ export function revealLabel(platform: DesktopPlatform): string {
   if (platform === "darwin") return "Show in Finder";
   if (platform === "win32") return "Show in File Explorer";
   return "Open folder";
+}
+
+export function revealFileLabel(platform: DesktopPlatform): string {
+  if (platform === "darwin") return "Reveal in Finder";
+  if (platform === "win32") return "Reveal in File Explorer";
+  return "Open containing folder";
 }
 
 export function unwrapFolderResult<T>(result: FolderResult<T>): T {

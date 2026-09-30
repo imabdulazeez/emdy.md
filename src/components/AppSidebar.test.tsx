@@ -21,6 +21,9 @@ import {
 import { registerEditorApi, resetEditorApiState } from "~/state/editor-api";
 import { layoutMode, resetLayoutState, setLayoutMode } from "~/state/layout";
 import { resetLibraryState } from "~/state/library";
+import { applyOpenedFiles, isOpenedFile } from "~/state/opened-files";
+import { DESKTOP_BRIDGE_KEY, type DesktopPlatform } from "~/lib/desktop/bridge";
+import { createMemoryBridge, type MemoryBridge } from "~/lib/desktop/memory-bridge";
 import { resetThemeState } from "~/state/theme";
 import { resetNavigationState, view } from "~/state/navigation";
 import {
@@ -1138,5 +1141,105 @@ describe("AppSidebar pinning", () => {
     expect(screen.queryByText("Pinned")).toBeNull();
     expect(namesInGroup("Titles")).toEqual(["Fresh", "Recent"]);
     expect(namesInGroup("Contents")).toEqual(["Old"]);
+  });
+});
+
+describe("AppSidebar opened files", () => {
+  const OUTSIDE = {
+    id: "out001",
+    title: "Outside notes",
+    text: "# Outside",
+    icon: null,
+    fixedTitle: true as const,
+  };
+  const host = globalThis as Record<string, unknown>;
+
+  const rightClick = (user: ReturnType<typeof userEvent.setup>, target: Element) =>
+    user.pointer({ keys: "[MouseRight]", target });
+  const menuItems = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
+
+  function openOutside(modified = Date.now()) {
+    flush(() => applyOpenedFiles({ added: [{ ...OUTSIDE, modified }], updated: [], removed: [] }));
+  }
+
+  function desktop(platform: DesktopPlatform = "darwin"): MemoryBridge {
+    const bridge = createMemoryBridge(null, { platform });
+    host[DESKTOP_BRIDGE_KEY] = bridge;
+    return bridge;
+  }
+
+  afterEach(() => {
+    delete host[DESKTOP_BRIDGE_KEY];
+  });
+
+  it("lists files opened from other folders in their own group, apart from the library", () => {
+    openOutside();
+    mount();
+    expect(groupNames()[0]).toBe("Other folders");
+    expect(namesInGroup("Other folders")).toEqual(["Outside notes"]);
+    expect(within(documentList()).getAllByRole("button", { name: "Outside notes" })).toHaveLength(
+      1,
+    );
+  });
+
+  it("moves a pinned opened file to the pinned group", () => {
+    openOutside();
+    flush(() => pinDocument(OUTSIDE.id));
+    mount();
+    expect(namesInGroup("Pinned")).toEqual(["Outside notes"]);
+    expect(groupNames()).not.toContain("Other folders");
+  });
+
+  it("closes an opened file instead of offering to delete it", async () => {
+    const user = userEvent.setup();
+    openOutside();
+    mount();
+    expect(screen.queryByRole("button", { name: "Delete Outside notes" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Close Outside notes" }));
+    expect(documents().some((doc) => doc.id === OUTSIDE.id)).toBe(false);
+    expect(screen.queryByRole("group", { name: "Delete Outside notes?" })).toBeNull();
+    expect(groupNames()).not.toContain("Other folders");
+  });
+
+  it("offers Close rather than Delete in an opened file's context menu", async () => {
+    const user = userEvent.setup();
+    openOutside();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: "Outside notes" }));
+    expect(menuItems()).toEqual(["Change icon…", "Pin", "Close"]);
+    const close = screen.getByRole("menuitem", { name: "Close" });
+    expect(close).not.toHaveAttribute("data-danger");
+    await user.click(close);
+    expect(documents().some((doc) => doc.id === OUTSIDE.id)).toBe(false);
+  });
+
+  it("offers to reveal every document in the desktop app with the platform's wording", async () => {
+    const user = userEvent.setup();
+    desktop("win32");
+    openOutside();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
+    expect(menuItems()).toEqual(["Change icon…", "Pin", "Reveal in File Explorer", "Delete…"]);
+    await user.keyboard("{Escape}");
+    await rightClick(user, screen.getByRole("button", { name: "Outside notes" }));
+    expect(menuItems()).toEqual(["Change icon…", "Pin", "Reveal in File Explorer", "Close"]);
+  });
+
+  it("reveals an opened file through the desktop app", async () => {
+    const user = userEvent.setup();
+    const bridge = desktop();
+    openOutside();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: "Outside notes" }));
+    await user.click(screen.getByRole("menuitem", { name: "Reveal in Finder" }));
+    await vi.waitFor(() => expect(bridge.revealedFiles()).toEqual([OUTSIDE.id]));
+    expect(isOpenedFile(OUTSIDE.id)).toBe(true);
+  });
+
+  it("offers no reveal action in the browser", async () => {
+    const user = userEvent.setup();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
+    expect(menuItems().some((label) => label?.startsWith("Reveal"))).toBe(false);
   });
 });
