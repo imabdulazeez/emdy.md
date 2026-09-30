@@ -86,6 +86,7 @@ export interface OpenedFilesApi {
 
 export interface WindowApi {
   onBeforeClose: (listener: () => Promise<void> | void) => () => void;
+  onCommand: (listener: (command: string) => void) => () => void;
 }
 
 export type DesktopPlatform = "darwin" | "win32" | "linux";

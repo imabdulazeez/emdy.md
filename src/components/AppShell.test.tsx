@@ -2,7 +2,9 @@ import { render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { flush } from "solid-js";
-import { createMemoryDirectory } from "~/lib/storage/directory";
+import { DESKTOP_BRIDGE_KEY } from "~/lib/desktop/bridge";
+import { createMemoryBridge } from "~/lib/desktop/memory-bridge";
+import { createMemoryDirectory, type MemoryDirectory } from "~/lib/storage/directory";
 import { seedDirectory } from "~/lib/storage/fixtures";
 import { TEST_DOCUMENTS } from "~/test-documents";
 import { resetCursorState } from "~/state/cursor";
@@ -41,7 +43,13 @@ import {
   shortcutsOpen,
   sidebarOpen,
 } from "~/state/ui";
-import { SHORTCUTS, ariaKeyShortcuts, formatShortcut, isMacPlatform } from "~/lib/shortcuts";
+import {
+  SHORTCUTS,
+  ariaKeyShortcuts,
+  formatShortcut,
+  isMacPlatform,
+  keysFor,
+} from "~/lib/shortcuts";
 import { resetWorkspaceState } from "~/state/workspace";
 
 import { getRenderClient } from "~/lib/preview/render-client";
@@ -60,11 +68,14 @@ const location = () =>
 const documentLocation = () => location().replace(/(#\/d\/[^/]+)\/[^/]+$/, "$1");
 
 let restoreDirectory: (() => void) | undefined;
+let libraryDirectory: MemoryDirectory;
+const host = globalThis as Record<string, unknown>;
 
 async function boot(seed = true) {
   restoreDirectory?.();
   resetLibraryState();
   const directory = createMemoryDirectory();
+  libraryDirectory = directory;
   if (seed) await seedDirectory(directory, TEST_DOCUMENTS);
   restoreDirectory = useLibraryDirectory(async () => directory);
   await startLibrary();
@@ -74,6 +85,7 @@ async function boot(seed = true) {
 beforeEach(() => boot());
 
 afterEach(() => {
+  delete host[DESKTOP_BRIDGE_KEY];
   restoreDirectory?.();
   restoreDirectory = undefined;
   resetLibraryState();
@@ -429,6 +441,61 @@ describe("AppShell", () => {
     await waitFor(() => expect(editor).toHaveFocus());
   });
 
+  it("saves straight away with Mod-S instead of waiting for the debounce", async () => {
+    const user = userEvent.setup();
+    await mount();
+    const saved = () =>
+      Object.values(libraryDirectory.files()).some((text) => text.includes("Saved on demand"));
+    flush(() => setDocText("# Heading\n\nSaved on demand"));
+    expect(saved()).toBe(false);
+    const started = Date.now();
+    await user.keyboard("{Control>}s{/Control}");
+    await waitFor(() => expect(saved()).toBe(true), { timeout: 400 });
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it("runs commands sent from the desktop menu", async () => {
+    const bridge = createMemoryBridge(null);
+    host[DESKTOP_BRIDGE_KEY] = bridge;
+    const result = await mount();
+    const before = documents().length;
+
+    flush(() => bridge.sendCommand("layout-reader"));
+    flush();
+    expect(layoutMode()).toBe("reader");
+    flush(() => bridge.sendCommand("shortcuts"));
+    flush();
+    expect(shortcutsOpen()).toBe(true);
+    flush(() => bridge.sendCommand("new-document"));
+    flush();
+    expect(documents()).toHaveLength(before + 1);
+    expect(shortcutsOpen()).toBe(false);
+    flush(() => bridge.sendCommand("settings"));
+    flush();
+    expect(view()).toBe("settings");
+
+    flush(() => bridge.sendCommand("bold"));
+    flush(() => bridge.sendCommand("not-a-command"));
+    flush();
+    expect(documents()).toHaveLength(before + 1);
+
+    result.unmount();
+    flush(() => bridge.sendCommand("new-document"));
+    flush();
+    expect(documents()).toHaveLength(before + 1);
+  });
+
+  it("creates a document with Mod-N in the desktop app", async () => {
+    host[DESKTOP_BRIDGE_KEY] = createMemoryBridge(null);
+    const user = userEvent.setup();
+    await mount();
+    const before = documents().length;
+    await user.keyboard("{Control>}{Alt>}n{/Alt}{/Control}");
+    expect(documents()).toHaveLength(before);
+    await user.keyboard("{Control>}n{/Control}");
+    expect(documents()).toHaveLength(before + 1);
+  });
+
   it("creates the first document with Mod-Alt-N from the welcome sheet", async () => {
     const user = userEvent.setup();
     await boot(false);
@@ -503,8 +570,8 @@ describe("AppShell", () => {
     await mount();
     const registered = new Map(
       SHORTCUTS.map((shortcut) => [
-        ariaKeyShortcuts(shortcut.keys, mac),
-        formatShortcut(shortcut.keys, mac),
+        ariaKeyShortcuts(keysFor(shortcut), mac),
+        formatShortcut(keysFor(shortcut), mac),
       ]),
     );
     const hints = new Set(registered.values());

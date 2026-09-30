@@ -1,5 +1,6 @@
 import { createEffect, Match, onSettled, Show, Switch } from "solid-js";
 import { runWhenIdle } from "~/lib/debounce";
+import { desktopBridge } from "~/lib/desktop/bridge";
 import { hasOpenComposerMenu } from "~/lib/editor/composer";
 import { matchesMediaQuery, MOBILE_MEDIA_QUERY } from "~/lib/media";
 import { getRenderClient } from "~/lib/preview/render-client";
@@ -7,16 +8,25 @@ import { startPersistenceSync } from "~/lib/storage/persisted";
 import {
   ariaKeyShortcuts,
   handleGlobalShortcut,
+  isGlobalShortcutId,
   isMacPlatform,
+  runGlobalShortcut,
   shortcutKeys,
   shortcutTitle,
+  type GlobalShortcutHandlers,
 } from "~/lib/shortcuts";
 import { pageTitle } from "~/lib/title";
 import { holdTransitions } from "~/lib/transitions";
 import { startDesktopSync } from "~/state/desktop";
 import { createDocument, docText, hasDocuments, title } from "~/state/document";
 import { layoutMode, setLayoutMode } from "~/state/layout";
-import { currentLibrary, libraryStatus, startLibrary, trackLibrary } from "~/state/library";
+import {
+  currentLibrary,
+  libraryStatus,
+  retryLibrarySave,
+  startLibrary,
+  trackLibrary,
+} from "~/state/library";
 import { closeSettings, startHistorySync, toggleSettings, view } from "~/state/navigation";
 import { updateStatsFromText } from "~/state/stats";
 import { applyTheme, watchSystemTheme } from "~/state/theme";
@@ -114,6 +124,30 @@ export default function AppShell() {
     const stopThemeWatch = watchSystemTheme(window);
     const mac = isMacPlatform();
 
+    const handlers: GlobalShortcutHandlers = {
+      setLayout: setLayoutMode,
+      toggleSidebar: () => {
+        if (matchesMediaQuery(MOBILE_MEDIA_QUERY)) toggleSidebar();
+      },
+      toggleFocusMode,
+      toggleShortcuts,
+      toggleSettings: () => toggleSettings(),
+      focusSearch: () => {
+        setShortcutsOpen(false);
+        setFocusMode(false);
+        if (matchesMediaQuery(MOBILE_MEDIA_QUERY)) setSidebarOpen(true);
+        requestSearch();
+      },
+      createDocument: () => {
+        if (libraryStatus().kind !== "ready") return;
+        setShortcutsOpen(false);
+        closeSettings();
+        createDocument();
+        requestEditorFocus();
+      },
+      save: () => void retryLibrarySave(),
+    };
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         if (shortcutsOpen()) {
@@ -130,38 +164,16 @@ export default function AppShell() {
         if (focusMode()) setFocusMode(false);
         return;
       }
-      const handled = handleGlobalShortcut(
-        event,
-        {
-          setLayout: setLayoutMode,
-          toggleSidebar: () => {
-            if (matchesMediaQuery(MOBILE_MEDIA_QUERY)) toggleSidebar();
-          },
-          toggleFocusMode,
-          toggleShortcuts,
-          toggleSettings: () => toggleSettings(),
-          focusSearch: () => {
-            setShortcutsOpen(false);
-            setFocusMode(false);
-            if (matchesMediaQuery(MOBILE_MEDIA_QUERY)) setSidebarOpen(true);
-            requestSearch();
-          },
-          createDocument: () => {
-            if (libraryStatus().kind !== "ready") return;
-            setShortcutsOpen(false);
-            closeSettings();
-            createDocument();
-            requestEditorFocus();
-          },
-        },
-        mac,
-      );
+      const handled = handleGlobalShortcut(event, handlers, mac);
       if (handled) {
         event.preventDefault();
         event.stopPropagation();
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
+    const stopCommands = desktopBridge()?.window.onCommand((command) => {
+      if (isGlobalShortcutId(command)) runGlobalShortcut(command, handlers);
+    });
 
     return () => {
       cancelRenderWarmup();
@@ -169,6 +181,7 @@ export default function AppShell() {
       stopDesktopSync();
       stopThemeWatch();
       window.removeEventListener("keydown", onKeyDown, true);
+      stopCommands?.();
     };
   });
 

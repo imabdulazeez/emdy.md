@@ -22,6 +22,7 @@ export const CHANNELS = {
   filesChanged: "emdy:files:changed",
   beforeClose: "emdy:window:before-close",
   closeReady: "emdy:window:close-ready",
+  menuCommand: "emdy:menu:command",
 } as const;
 
 export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];

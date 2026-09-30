@@ -277,6 +277,11 @@ function openExternally(url: string): void {
   if (isExternalUrl(url)) void shell.openExternal(url);
 }
 
+function sendCommand(command: string): void {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  window?.webContents.send(CHANNELS.menuCommand, command);
+}
+
 function zoomWindow(direction: ZoomDirection): void {
   const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   if (!window) return;
@@ -367,6 +372,7 @@ async function start(): Promise<void> {
         openFiles: () => void chooseFiles(),
         revealLibrary: () => void shell.openPath(libraryFolder),
         zoom: zoomWindow,
+        command: sendCommand,
       }),
     ),
   );

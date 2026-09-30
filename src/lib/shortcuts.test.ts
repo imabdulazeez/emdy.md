@@ -9,9 +9,12 @@ import {
   ariaKeyShortcuts,
   formatShortcut,
   handleGlobalShortcut,
+  isGlobalShortcutId,
   isMacPlatform,
+  keysFor,
   matchesShortcut,
   parseShortcut,
+  runGlobalShortcut,
   shortcutKeys,
   shortcutTitle,
   type KeyEventLike,
@@ -103,16 +106,19 @@ describe("matchesShortcut", () => {
   });
 });
 
+const globalHandlers = () => ({
+  setLayout: vi.fn(),
+  toggleSidebar: vi.fn(),
+  toggleFocusMode: vi.fn(),
+  toggleShortcuts: vi.fn(),
+  toggleSettings: vi.fn(),
+  focusSearch: vi.fn(),
+  createDocument: vi.fn(),
+  save: vi.fn(),
+});
+
 describe("handleGlobalShortcut", () => {
-  const handlers = () => ({
-    setLayout: vi.fn(),
-    toggleSidebar: vi.fn(),
-    toggleFocusMode: vi.fn(),
-    toggleShortcuts: vi.fn(),
-    toggleSettings: vi.fn(),
-    focusSearch: vi.fn(),
-    createDocument: vi.fn(),
-  });
+  const handlers = globalHandlers;
 
   it("switches layouts with Mod-1/2/3", () => {
     const h = handlers();
@@ -153,30 +159,77 @@ describe("handleGlobalShortcut", () => {
     expect(h.focusSearch).toHaveBeenCalledTimes(2);
   });
 
-  it("creates a document with Mod-Alt-N", () => {
+  it("creates a document with Mod-Alt-N in the browser", () => {
     const h = handlers();
-    expect(handleGlobalShortcut(key({ key: "n", metaKey: true, altKey: true }), h, true)).toBe(
-      true,
-    );
+    expect(
+      handleGlobalShortcut(key({ key: "n", metaKey: true, altKey: true }), h, true, false),
+    ).toBe(true);
     expect(
       handleGlobalShortcut(
         key({ key: "Dead", code: "KeyN", metaKey: true, altKey: true }),
         h,
         true,
+        false,
       ),
     ).toBe(true);
-    expect(handleGlobalShortcut(key({ key: "n", ctrlKey: true, altKey: true }), h, false)).toBe(
-      true,
-    );
-    expect(handleGlobalShortcut(key({ key: "n", metaKey: true }), h, true)).toBe(false);
-    expect(handleGlobalShortcut(key({ key: "n", ctrlKey: true }), h, false)).toBe(false);
+    expect(
+      handleGlobalShortcut(key({ key: "n", ctrlKey: true, altKey: true }), h, false, false),
+    ).toBe(true);
+    expect(handleGlobalShortcut(key({ key: "n", metaKey: true }), h, true, false)).toBe(false);
+    expect(handleGlobalShortcut(key({ key: "n", ctrlKey: true }), h, false, false)).toBe(false);
     expect(h.createDocument).toHaveBeenCalledTimes(3);
+  });
+
+  it("creates a document with Mod-N in the desktop app", () => {
+    const h = handlers();
+    expect(handleGlobalShortcut(key({ key: "n", metaKey: true }), h, true, true)).toBe(true);
+    expect(handleGlobalShortcut(key({ key: "N", ctrlKey: true }), h, false, true)).toBe(true);
+    expect(handleGlobalShortcut(key({ key: "n", ctrlKey: true }), h, true, true)).toBe(false);
+    expect(
+      handleGlobalShortcut(key({ key: "n", metaKey: true, altKey: true }), h, true, true),
+    ).toBe(false);
+    expect(
+      handleGlobalShortcut(key({ key: "N", metaKey: true, shiftKey: true }), h, true, true),
+    ).toBe(false);
+    expect(h.createDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it("saves with Mod-S in the browser and the desktop app", () => {
+    const h = handlers();
+    expect(handleGlobalShortcut(key({ key: "s", metaKey: true }), h, true, false)).toBe(true);
+    expect(handleGlobalShortcut(key({ key: "s", ctrlKey: true }), h, false, true)).toBe(true);
+    expect(handleGlobalShortcut(key({ key: "S", metaKey: true, shiftKey: true }), h, true)).toBe(
+      false,
+    );
+    expect(h.save).toHaveBeenCalledTimes(2);
   });
 
   it("ignores unrelated keys", () => {
     const h = handlers();
     expect(handleGlobalShortcut(key({ key: "a" }), h, true)).toBe(false);
     expect(handleGlobalShortcut(key({ key: "b", metaKey: true }), h, true)).toBe(false);
+  });
+});
+
+describe("runGlobalShortcut", () => {
+  it("runs a global command by id, as the desktop menu does", () => {
+    const h = globalHandlers();
+    expect(runGlobalShortcut("new-document", h)).toBe(true);
+    expect(runGlobalShortcut("layout-reader", h)).toBe(true);
+    expect(runGlobalShortcut("save", h)).toBe(true);
+    expect(h.createDocument).toHaveBeenCalledTimes(1);
+    expect(h.setLayout).toHaveBeenCalledWith("reader");
+    expect(h.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses ids that are not global commands", () => {
+    const h = globalHandlers();
+    expect(runGlobalShortcut("bold", h)).toBe(false);
+    expect(Object.values(h).every((spy) => spy.mock.calls.length === 0)).toBe(true);
+    expect(isGlobalShortcutId("settings")).toBe(true);
+    expect(isGlobalShortcutId("bold")).toBe(false);
+    expect(isGlobalShortcutId("nope")).toBe(false);
+    expect(isGlobalShortcutId(3)).toBe(false);
   });
 });
 
@@ -198,13 +251,28 @@ describe("SHORTCUTS", () => {
     for (const shortcut of SHORTCUTS) expect(SHORTCUT_GROUPS).toContain(shortcut.group);
   });
 
-  it("gives each action its own keys, except the Escape chain in AppShell", () => {
-    const byKeys = new Map<string, string[]>();
+  it.each([false, true])(
+    "gives each action its own keys, except the Escape chain in AppShell (desktop: %s)",
+    (desktop) => {
+      const byKeys = new Map<string, string[]>();
+      for (const shortcut of SHORTCUTS) {
+        const keys = keysFor(shortcut, desktop);
+        byKeys.set(keys, [...(byKeys.get(keys) ?? []), shortcut.id]);
+      }
+      const shared = [...byKeys.values()].filter((ids) => ids.length > 1);
+      expect(shared).toEqual([["exit-focus", "close-settings"]]);
+    },
+  );
+
+  it("overrides keys only for browser-reserved combinations the desktop app can claim", () => {
+    const reserved = new Set(["Mod-n", "Mod-t", "Mod-w", "Mod-q", "Mod-Tab", "F5", "F12"]);
     for (const shortcut of SHORTCUTS) {
-      byKeys.set(shortcut.keys, [...(byKeys.get(shortcut.keys) ?? []), shortcut.id]);
+      expect(reserved.has(shortcut.keys), shortcut.id).toBe(false);
+      if ("desktopKeys" in shortcut) {
+        expect(shortcut.desktopKeys, shortcut.id).not.toBe(shortcut.keys);
+        expect(reserved.has(shortcut.desktopKeys), shortcut.id).toBe(true);
+      }
     }
-    const shared = [...byKeys.values()].filter((ids) => ids.length > 1);
-    expect(shared).toEqual([["exit-focus", "close-settings"]]);
   });
 });
 
@@ -213,6 +281,13 @@ describe("shortcutKeys and shortcutTitle", () => {
     expect(shortcutKeys("bold")).toBe("Mod-b");
     expect(shortcutKeys("layout-reader")).toBe("Mod-3");
     expect(shortcutKeys("context-menu")).toBe("Shift-F10");
+  });
+
+  it("uses the desktop keys only in the desktop app", () => {
+    expect(shortcutKeys("new-document")).toBe("Mod-Alt-n");
+    expect(shortcutKeys("new-document", false)).toBe("Mod-Alt-n");
+    expect(shortcutKeys("new-document", true)).toBe("Mod-n");
+    expect(shortcutKeys("bold", true)).toBe("Mod-b");
   });
 
   it("lists the table copy shortcut under Editing", () => {
@@ -292,6 +367,7 @@ describe("SHORTCUTS bindings", () => {
     toggleSettings: vi.fn(),
     focusSearch: vi.fn(),
     createDocument: vi.fn(),
+    save: vi.fn(),
   });
 
   const globalIds = new Set<ShortcutId>(GLOBAL_SHORTCUTS.map(([id]) => id));
@@ -309,31 +385,34 @@ describe("SHORTCUTS bindings", () => {
       matchesShortcut(new KeyboardEvent("keydown", eventFor(keys, mac)), keys, mac),
   };
 
-  it.each(SHORTCUTS.map((shortcut) => [shortcut.id, shortcut.keys] as const))(
-    "binds %s (%s)",
-    (id, keys) => {
-      if (globalIds.has(id)) {
-        for (const mac of [true, false]) {
-          const h = handlers();
-          expect(handleGlobalShortcut(eventFor(keys, mac), h, mac)).toBe(true);
-          const calls = Object.values(h).reduce((sum, spy) => sum + spy.mock.calls.length, 0);
-          expect(calls).toBe(1);
-        }
-        return;
-      }
-      const component = COMPONENT_BINDINGS[id];
-      if (component) {
-        expect(component(keys, true)).toBe(true);
-        expect(component(keys, false)).toBe(true);
-        return;
-      }
-      for (const platform of PLATFORMS) {
-        expect(bound(editorKeymap, platform), `${id} on ${platform}`).toContain(
-          normalize(keys, platform),
-        );
-      }
-    },
+  const bindings = [false, true].flatMap((desktop) =>
+    SHORTCUTS.filter((shortcut) => !desktop || "desktopKeys" in shortcut).map(
+      (shortcut) => [shortcut.id, keysFor(shortcut, desktop), desktop] as const,
+    ),
   );
+
+  it.each(bindings)("binds %s (%s, desktop: %s)", (id, keys, desktop) => {
+    if (globalIds.has(id)) {
+      for (const mac of [true, false]) {
+        const h = handlers();
+        expect(handleGlobalShortcut(eventFor(keys, mac), h, mac, desktop)).toBe(true);
+        const calls = Object.values(h).reduce((sum, spy) => sum + spy.mock.calls.length, 0);
+        expect(calls).toBe(1);
+      }
+      return;
+    }
+    const component = COMPONENT_BINDINGS[id];
+    if (component) {
+      expect(component(keys, true)).toBe(true);
+      expect(component(keys, false)).toBe(true);
+      return;
+    }
+    for (const platform of PLATFORMS) {
+      expect(bound(editorKeymap, platform), `${id} on ${platform}`).toContain(
+        normalize(keys, platform),
+      );
+    }
+  });
 
   it("lists every key the app binds in the editor", () => {
     const registered = new Set<string>(SHORTCUTS.map((shortcut) => shortcut.keys));
@@ -343,13 +422,16 @@ describe("SHORTCUTS bindings", () => {
     expect(unlisted).toEqual([]);
   });
 
-  it("never shadows an editor binding with a global shortcut", () => {
-    for (const [id] of GLOBAL_SHORTCUTS) {
-      for (const platform of PLATFORMS) {
-        expect(bound(editorKeymap, platform), `${id} on ${platform}`).not.toContain(
-          normalize(shortcutKeys(id), platform),
-        );
+  it.each([false, true])(
+    "never shadows an editor binding with a global shortcut (desktop: %s)",
+    (desktop) => {
+      for (const [id] of GLOBAL_SHORTCUTS) {
+        for (const platform of PLATFORMS) {
+          expect(bound(editorKeymap, platform), `${id} on ${platform}`).not.toContain(
+            normalize(shortcutKeys(id, desktop), platform),
+          );
+        }
       }
-    }
-  });
+    },
+  );
 });

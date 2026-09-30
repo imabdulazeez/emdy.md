@@ -123,3 +123,29 @@ test("settings name the documents folder instead of browser storage", async () =
   await expect(page.getByRole("button", { name: "Change folder…", exact: true })).toBeVisible();
   await expect(page.getByText("This browser", { exact: true })).toHaveCount(0);
 });
+
+test("Mod-N creates a document in the desktop app, where the browser needs Mod-Alt-N", async () => {
+  const { page } = await open();
+  await createDocument(page, "First page", "# First page");
+  await expect.poll(() => readFolderFile(sandbox.folder, "First page.md")).toBe("# First page");
+  const rows = page.locator("[data-document-row]");
+  await expect(rows).toHaveCount(1);
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+
+  await editor.focus();
+  await page.keyboard.press("ControlOrMeta+Alt+KeyN");
+  await expect(rows).toHaveCount(1);
+  await expect(editor).toContainText("# First page");
+
+  const before = page.url();
+  await page.keyboard.press("ControlOrMeta+KeyN");
+  await expect(rows).toHaveCount(2);
+  await expect(page).not.toHaveURL(before);
+  await expect(editor).toBeFocused();
+  await page.keyboard.type("Made with the shortcut");
+  await expect
+    .poll(() => readFolderFile(sandbox.folder, "Untitled.md"))
+    .toBe("Made with the shortcut");
+  expect(await readFolderFile(sandbox.folder, "First page.md")).toBe("# First page");
+  expect(page.context().pages()).toHaveLength(1);
+});

@@ -101,6 +101,15 @@ export function createBridge(): DesktopBridge {
           closeListeners.delete(listener);
         };
       },
+      onCommand(listener) {
+        const handler = (_event: unknown, command: unknown) => {
+          if (typeof command === "string") listener(command);
+        };
+        ipcRenderer.on(CHANNELS.menuCommand, handler);
+        return () => {
+          ipcRenderer.removeListener(CHANNELS.menuCommand, handler);
+        };
+      },
     },
   };
 }

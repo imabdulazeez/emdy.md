@@ -38,6 +38,7 @@ import {
 } from "~/state/ui";
 import { pinDocument, pinnedDocumentIds, resetWorkspaceState } from "~/state/workspace";
 import { automaticDocumentIcon } from "~/lib/document-icon";
+import { ariaKeyShortcuts, isMacPlatform, shortcutTitle } from "~/lib/shortcuts";
 import AppSidebar from "./AppSidebar";
 import { SidebarProvider, SidebarTrigger } from "./ui/sidebar";
 
@@ -1248,6 +1249,15 @@ describe("AppSidebar opened files", () => {
     expect(close).not.toHaveAttribute("data-danger");
     await user.click(close);
     expect(documents().some((doc) => doc.id === OUTSIDE.id)).toBe(false);
+  });
+
+  it("advertises the desktop app's New document shortcut", () => {
+    desktop();
+    mount();
+    const mac = isMacPlatform();
+    const create = screen.getByRole("button", { name: "New document" });
+    expect(create).toHaveAttribute("title", shortcutTitle("New document", "Mod-n", mac));
+    expect(create).toHaveAttribute("aria-keyshortcuts", ariaKeyShortcuts("Mod-n", mac));
   });
 
   it("offers to reveal every document in the desktop app with the platform's wording", async () => {

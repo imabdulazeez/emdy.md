@@ -1,10 +1,56 @@
-import type { MenuItemConstructorOptions } from "electron";
+import type { KeyboardEvent, MenuItemConstructorOptions } from "electron";
+import { shortcutKeys, type ShortcutId } from "../src/lib/shortcuts";
 import type { ZoomDirection } from "./window-chrome";
 
 export interface MenuActions {
   openFiles: () => void;
   revealLibrary: () => void;
   zoom: (direction: ZoomDirection) => void;
+  command: (id: ShortcutId) => void;
+}
+
+export const MENU_COMMANDS = {
+  "new-document": "New Document",
+  save: "Save",
+  settings: "Settings…",
+  "layout-editor": "Raw Markdown",
+  "layout-preview": "Editable Preview",
+  "layout-reader": "Read-only Preview",
+  search: "Search Documents…",
+  "toggle-focus": "Focus Mode",
+  shortcuts: "Keyboard Shortcuts",
+} as const satisfies Partial<Record<ShortcutId, string>>;
+
+export type MenuCommand = keyof typeof MENU_COMMANDS;
+
+const ACCELERATOR_MODIFIERS: Record<string, string> = {
+  mod: "CmdOrCtrl",
+  ctrl: "Ctrl",
+  alt: "Alt",
+  shift: "Shift",
+};
+
+export function registryAccelerator(keys: string): string {
+  const parts = keys.split("-");
+  const key = parts.pop() ?? "";
+  const modifiers = parts.map((part) => ACCELERATOR_MODIFIERS[part.toLowerCase()] ?? part);
+  return [...modifiers, key.length === 1 ? key.toUpperCase() : key].join("+");
+}
+
+export function commandItem(
+  id: MenuCommand,
+  actions: Pick<MenuActions, "command">,
+): MenuItemConstructorOptions {
+  return {
+    id,
+    label: MENU_COMMANDS[id],
+    accelerator: registryAccelerator(shortcutKeys(id, true)),
+    registerAccelerator: false,
+    click: (_item, _window, event: KeyboardEvent) => {
+      if (event?.triggeredByAccelerator) return;
+      actions.command(id);
+    },
+  };
 }
 
 export interface ShortcutChord {
@@ -80,6 +126,8 @@ export function applicationMenu(
     submenu: [
       { role: "about" },
       { type: "separator" },
+      commandItem("settings", actions),
+      { type: "separator" },
       { role: "services" },
       { type: "separator" },
       { role: "hide", accelerator: "Command+H" },
@@ -92,6 +140,7 @@ export function applicationMenu(
   const fileMenu: MenuItemConstructorOptions = {
     label: "File",
     submenu: [
+      commandItem("new-document", actions),
       {
         id: "open-files",
         label: "Open…",
@@ -99,8 +148,11 @@ export function applicationMenu(
         click: () => actions.openFiles(),
       },
       { type: "separator" },
+      commandItem("save", actions),
+      { type: "separator" },
       { id: "reveal-library", label: reveal, click: () => actions.revealLibrary() },
       { type: "separator" },
+      ...(mac ? [] : ([commandItem("settings", actions), { type: "separator" }] as const)),
       mac
         ? { role: "close", accelerator: "Command+W" }
         : platform === "win32"
@@ -132,6 +184,13 @@ export function applicationMenu(
             { type: "separator" },
           ] satisfies MenuItemConstructorOptions[])
         : []),
+      commandItem("layout-editor", actions),
+      commandItem("layout-preview", actions),
+      commandItem("layout-reader", actions),
+      { type: "separator" },
+      commandItem("search", actions),
+      commandItem("toggle-focus", actions),
+      { type: "separator" },
       {
         id: "zoom-reset",
         label: "Actual Size",
@@ -167,16 +226,22 @@ export function applicationMenu(
       : [{ role: "minimize", accelerator: "CmdOrCtrl+M" }],
   };
 
-  return [...(mac ? [appMenu] : []), fileMenu, editMenu, viewMenu, windowMenu];
+  const helpMenu: MenuItemConstructorOptions = {
+    label: "Help",
+    ...(mac ? { role: "help" as const } : {}),
+    submenu: [commandItem("shortcuts", actions)],
+  };
+
+  return [...(mac ? [appMenu] : []), fileMenu, editMenu, viewMenu, windowMenu, helpMenu];
 }
 
 export function menuAccelerators(
   template: readonly MenuItemConstructorOptions[],
-): { role?: string; accelerator: string }[] {
-  const found: { role?: string; accelerator: string }[] = [];
+): { id?: string; role?: string; accelerator: string }[] {
+  const found: { id?: string; role?: string; accelerator: string }[] = [];
   for (const item of template) {
     if (typeof item.accelerator === "string" && item.accelerator !== "")
-      found.push({ role: item.role, accelerator: item.accelerator });
+      found.push({ id: item.id, role: item.role, accelerator: item.accelerator });
     if (Array.isArray(item.submenu)) found.push(...menuAccelerators(item.submenu));
   }
   return found;

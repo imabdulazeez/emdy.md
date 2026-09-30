@@ -1,15 +1,23 @@
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { SHORTCUTS } from "../src/lib/shortcuts";
+import { keysFor, shortcutKeys, SHORTCUTS } from "../src/lib/shortcuts";
 import {
   acceleratorChord,
   applicationMenu,
+  MENU_COMMANDS,
   menuAccelerators,
+  registryAccelerator,
   registryChord,
   sameChord,
+  type MenuCommand,
 } from "./menu";
 
-const ACTIONS = { openFiles: () => {}, revealLibrary: () => {}, zoom: () => {} };
+const ACTIONS = {
+  openFiles: () => {},
+  revealLibrary: () => {},
+  zoom: () => {},
+  command: () => {},
+};
 const PLATFORMS = ["darwin", "win32", "linux"] as const;
 const SAME_ACTION_ROLES = new Map([
   ["undo", "undo"],
@@ -67,18 +75,108 @@ describe("registryChord", () => {
   });
 });
 
+describe("registryAccelerator", () => {
+  it("writes registry keys as Electron accelerators", () => {
+    expect(registryAccelerator("Mod-n")).toBe("CmdOrCtrl+N");
+    expect(registryAccelerator("Mod-Shift-f")).toBe("CmdOrCtrl+Shift+F");
+    expect(registryAccelerator("Mod-Alt-n")).toBe("CmdOrCtrl+Alt+N");
+    expect(registryAccelerator("Mod-,")).toBe("CmdOrCtrl+,");
+    expect(registryAccelerator("Mod-/")).toBe("CmdOrCtrl+/");
+    expect(registryAccelerator("Mod-1")).toBe("CmdOrCtrl+1");
+  });
+
+  it.each(SHORTCUTS.map((shortcut) => [shortcut.id, keysFor(shortcut, true)] as const))(
+    "round-trips %s (%s) to the same chord",
+    (_id, keys) => {
+      for (const mac of [true, false]) {
+        expect(
+          sameChord(acceleratorChord(registryAccelerator(keys), mac), registryChord(keys)),
+        ).toBe(true);
+      }
+    },
+  );
+});
+
+describe("menu commands", () => {
+  const commands = Object.keys(MENU_COMMANDS) as MenuCommand[];
+
+  it.each(PLATFORMS)("lists every command once with its desktop shortcut on %s", (platform) => {
+    const all = items(applicationMenu(platform, false, ACTIONS));
+    for (const id of commands) {
+      const matches = all.filter((item) => item.id === id);
+      expect(matches, id).toHaveLength(1);
+      expect(matches[0]).toMatchObject({
+        label: MENU_COMMANDS[id],
+        accelerator: registryAccelerator(shortcutKeys(id, true)),
+        registerAccelerator: false,
+      });
+    }
+  });
+
+  it("shows ⌘N for New Document rather than the browser's stand-in", () => {
+    const create = items(applicationMenu("darwin", false, ACTIONS)).find(
+      (item) => item.id === "new-document",
+    );
+    expect(create?.accelerator).toBe("CmdOrCtrl+N");
+  });
+
+  it.each(PLATFORMS)("sends a clicked command to the app on %s", (platform) => {
+    const command = vi.fn();
+    const all = items(applicationMenu(platform, false, { ...ACTIONS, command }));
+    for (const id of commands) {
+      const item = all.find((entry) => entry.id === id)!;
+      (item.click as (...args: unknown[]) => void)(item, undefined, {
+        triggeredByAccelerator: false,
+      });
+    }
+    expect(command.mock.calls).toEqual(commands.map((id) => [id]));
+  });
+
+  it("leaves a command's keystroke to the page, which already handled it", () => {
+    const command = vi.fn();
+    const all = items(applicationMenu("darwin", false, { ...ACTIONS, command }));
+    const save = all.find((item) => item.id === "save")!;
+    (save.click as (...args: unknown[]) => void)(save, undefined, {
+      triggeredByAccelerator: true,
+    });
+    expect(command).not.toHaveBeenCalled();
+  });
+
+  it("puts Settings in the app menu on macOS and the File menu elsewhere", () => {
+    const menuOf = (platform: (typeof PLATFORMS)[number]) =>
+      applicationMenu(platform, false, ACTIONS)
+        .filter((menu) =>
+          (menu.submenu as MenuItemConstructorOptions[]).some((item) => item.id === "settings"),
+        )
+        .map((menu) => menu.label);
+    expect(menuOf("darwin")).toEqual(["emdy"]);
+    expect(menuOf("win32")).toEqual(["File"]);
+    expect(menuOf("linux")).toEqual(["File"]);
+  });
+
+  it.each(PLATFORMS)("ends with a Help menu on %s", (platform) => {
+    const help = applicationMenu(platform, false, ACTIONS).at(-1)!;
+    expect(help.label).toBe("Help");
+    expect((help.submenu as MenuItemConstructorOptions[]).map((item) => item.id)).toEqual([
+      "shortcuts",
+    ]);
+    expect(help.role).toBe(platform === "darwin" ? "help" : undefined);
+  });
+});
+
 describe("applicationMenu", () => {
   it.each(PLATFORMS)("never shadows a registered shortcut on %s", (platform) => {
     const mac = platform === "darwin";
     for (const development of [false, true]) {
       const template = applicationMenu(platform, development, ACTIONS);
-      for (const { role, accelerator } of menuAccelerators(template)) {
+      for (const { id, role, accelerator } of menuAccelerators(template)) {
         const chord = acceleratorChord(accelerator, mac);
         for (const shortcut of SHORTCUTS) {
-          if (!sameChord(chord, registryChord(shortcut.keys))) continue;
+          if (!sameChord(chord, registryChord(keysFor(shortcut, true)))) continue;
+          if (id === shortcut.id) continue;
           expect(
             SAME_ACTION_ROLES.get(role ?? ""),
-            `${accelerator} (${role ?? "custom"}) shadows ${shortcut.id}`,
+            `${accelerator} (${role ?? id ?? "custom"}) shadows ${shortcut.id}`,
           ).toBe(shortcut.id);
         }
       }
@@ -89,7 +187,7 @@ describe("applicationMenu", () => {
     "names every role's accelerator on %s so none falls back silently",
     (platform) => {
       const template = applicationMenu(platform, true, ACTIONS);
-      const unkeyed = new Set(["about", "services", "unhide", "zoom", "front"]);
+      const unkeyed = new Set(["about", "services", "unhide", "zoom", "front", "help"]);
       if (platform === "win32") unkeyed.add("quit");
       for (const item of items(template)) {
         if (!item.role) continue;
@@ -137,7 +235,8 @@ describe("applicationMenu", () => {
     const file = applicationMenu(platform, false, { ...ACTIONS, openFiles }).find(
       (item) => item.label === "File",
     )!;
-    const open = (file.submenu as MenuItemConstructorOptions[])[0];
+    const [create, open] = file.submenu as MenuItemConstructorOptions[];
+    expect(create.id).toBe("new-document");
     expect(open).toMatchObject({ id: "open-files", label: "Open…", accelerator: "CmdOrCtrl+O" });
     (open.click as () => void)();
     expect(openFiles).toHaveBeenCalledTimes(1);

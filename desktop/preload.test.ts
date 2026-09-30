@@ -20,8 +20,8 @@ const electron = vi.hoisted(() => {
     removeListener: vi.fn((channel: string, listener: (...args: unknown[]) => void) => {
       listeners.get(channel)?.delete(listener);
     }),
-    emit(channel: string) {
-      for (const listener of listeners.get(channel) ?? []) listener({});
+    emit(channel: string, ...args: unknown[]) {
+      for (const listener of listeners.get(channel) ?? []) listener({}, ...args);
     },
   };
 });
@@ -175,6 +175,19 @@ describe("preload bridge", () => {
     finishSave();
     await vi.waitFor(() => expect(electron.send).toHaveBeenCalledWith(CHANNELS.closeReady));
     expect(removed).not.toHaveBeenCalled();
+  });
+
+  it("hands menu commands to the page and stops once unsubscribed", () => {
+    const bridge = createBridge();
+    const listener = vi.fn();
+    const stop = bridge.window.onCommand(listener);
+    electron.emit(CHANNELS.menuCommand, "new-document");
+    electron.emit(CHANNELS.menuCommand, 42);
+    electron.emit(CHANNELS.menuCommand);
+    expect(listener.mock.calls).toEqual([["new-document"]]);
+    stop();
+    electron.emit(CHANNELS.menuCommand, "save");
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it("answers straight away when nothing needs saving", async () => {
