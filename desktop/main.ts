@@ -25,6 +25,7 @@ import {
   resolveAppRequest,
   type AppRoots,
 } from "./app-url";
+import { developmentIcon } from "./app-icon";
 import { CHANNELS } from "./channels";
 import { createCloseGuard, type CloseGuard } from "./close-guard";
 import {
@@ -226,6 +227,9 @@ function createWindow(): BrowserWindow {
     minHeight: 360,
     show: false,
     title: "emdy",
+    ...(development && process.platform !== "darwin"
+      ? { icon: developmentIcon(appRoot, process.platform) }
+      : {}),
     ...windowChrome(process.platform),
     webPreferences: {
       preload: join(appRoot, "preload.cjs"),
@@ -278,6 +282,8 @@ function createWindow(): BrowserWindow {
 
 async function start(): Promise<void> {
   await app.whenReady();
+  if (development && process.platform === "darwin")
+    app.dock?.setIcon(developmentIcon(appRoot, process.platform));
   lockDownSession();
   serveApp();
   registerIpc();

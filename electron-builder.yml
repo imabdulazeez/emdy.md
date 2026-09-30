@@ -30,7 +30,9 @@ mac:
   target:
     - dmg
     - zip
-  hardenedRuntime: true
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false
   darkModeSupport: true
 win:
   icon: icon.png

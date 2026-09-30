@@ -1,0 +1,151 @@
+name: Desktop builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  VP_GIT_HOOKS: "0"
+
+jobs:
+  macos:
+    name: macOS (DMG and zip)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read pnpm version
+        id: pnpm
+        run: echo "version=$(jq -r '.devEngines.packageManager.version' package.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache desktop spellcheck dictionaries
+        uses: actions/cache@v6
+        with:
+          path: node_modules/.cache/emdy-desktop
+          key: emdy-desktop-${{ hashFiles('node_modules/electron/checksums.json') }}
+
+      - name: Build the desktop app
+        run: pnpm build:desktop
+
+      - name: Package for Apple silicon and Intel
+        run: pnpm exec electron-builder --mac --arm64 --x64
+
+      - name: Verify the app signatures
+        run: |
+          for app in out/desktop/release/mac*/emdy.app; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+          done
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: emdy-macos
+          path: |
+            out/desktop/release/*.dmg
+            out/desktop/release/*.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  windows:
+    name: Windows (NSIS installer)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read pnpm version
+        id: pnpm
+        shell: bash
+        run: echo "version=$(jq -r '.devEngines.packageManager.version' package.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache desktop spellcheck dictionaries
+        uses: actions/cache@v6
+        with:
+          path: node_modules/.cache/emdy-desktop
+          key: emdy-desktop-${{ hashFiles('node_modules/electron/checksums.json') }}
+
+      - name: Build the desktop app
+        run: pnpm build:desktop
+
+      - name: Package for x64
+        run: pnpm exec electron-builder --win --x64
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: emdy-windows
+          path: out/desktop/release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  linux:
+    name: Linux (AppImage and tar.gz)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read pnpm version
+        id: pnpm
+        run: echo "version=$(jq -r '.devEngines.packageManager.version' package.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache desktop spellcheck dictionaries
+        uses: actions/cache@v6
+        with:
+          path: node_modules/.cache/emdy-desktop
+          key: emdy-desktop-${{ hashFiles('node_modules/electron/checksums.json') }}
+
+      - name: Build the desktop app
+        run: pnpm build:desktop
+
+      - name: Package for x64
+        run: pnpm exec electron-builder --linux --x64
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: emdy-linux
+          path: |
+            out/desktop/release/*.AppImage
+            out/desktop/release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
