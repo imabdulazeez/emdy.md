@@ -20,7 +20,8 @@ import {
 } from "~/state/document";
 import { registerEditorApi, resetEditorApiState } from "~/state/editor-api";
 import { layoutMode, resetLayoutState, setLayoutMode } from "~/state/layout";
-import { resetLibraryState } from "~/state/library";
+import { createMemoryDirectory } from "~/lib/storage/directory";
+import { resetLibraryState, startLibrary, useLibraryDirectory } from "~/state/library";
 import { applyOpenedFiles, isOpenedFile } from "~/state/opened-files";
 import { DESKTOP_BRIDGE_KEY, type DesktopPlatform } from "~/lib/desktop/bridge";
 import { createMemoryBridge, type MemoryBridge } from "~/lib/desktop/memory-bridge";
@@ -52,9 +53,17 @@ vi.mock("~/lib/document-icon", async (importOriginal) => {
 
 const originalMatchMedia = window.matchMedia;
 
-beforeEach(() => resetDocumentState(TEST_DOCUMENTS));
+let restoreDirectory: () => void;
+
+beforeEach(async () => {
+  const directory = createMemoryDirectory();
+  restoreDirectory = useLibraryDirectory(async () => directory);
+  await startLibrary();
+  resetDocumentState(TEST_DOCUMENTS);
+});
 
 afterEach(() => {
+  restoreDirectory();
   window.matchMedia = originalMatchMedia;
   resetNavigationState();
   window.history.replaceState(null, "", "/");
@@ -512,6 +521,21 @@ describe("AppSidebar", () => {
     );
   });
 
+  it("keeps New document disabled until the library has loaded", async () => {
+    resetLibraryState();
+    resetDocumentState(TEST_DOCUMENTS);
+    const user = userEvent.setup();
+    mount();
+    const button = screen.getByRole("button", { name: "New document" });
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(documents()).toHaveLength(TEST_DOCUMENTS.length);
+
+    await startLibrary();
+    flush();
+    expect(button).toBeEnabled();
+  });
+
   it("asks for confirmation before deleting and can cancel", async () => {
     const user = userEvent.setup();
     mount();
@@ -763,6 +787,19 @@ describe("AppSidebar context menus", () => {
     await user.click(screen.getByRole("menuitem", { name: "New document" }));
     expect(documents()).toHaveLength(TEST_DOCUMENTS.length + 1);
     expect(title()).toBe("Untitled");
+  });
+
+  it("ignores New document in the library menu while the library is loading", async () => {
+    resetLibraryState();
+    resetDocumentState(TEST_DOCUMENTS);
+    const user = userEvent.setup();
+    mount();
+    const content = screen
+      .getByRole("navigation", { name: "Main" })
+      .closest<HTMLElement>("[data-sidebar=content]")!;
+    await rightClick(user, content);
+    await user.click(await screen.findByRole("menuitem", { name: "New document" }));
+    expect(documents()).toHaveLength(TEST_DOCUMENTS.length);
   });
 
   it("opens the document menu from the keyboard and returns focus on Escape", async () => {

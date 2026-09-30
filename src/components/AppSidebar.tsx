@@ -19,6 +19,7 @@ import {
 } from "~/state/document";
 import { revealDocument } from "~/state/desktop";
 import { editorApi } from "~/state/editor-api";
+import { libraryStatus } from "~/state/library";
 import { closeSettings, openSettings, view } from "~/state/navigation";
 import { isOpenedFile, openedFileIds } from "~/state/opened-files";
 import { isPinned, pinDocument, pinnedDocumentIds, unpinDocument } from "~/state/workspace";
@@ -275,7 +276,10 @@ export default function AppSidebar() {
     closeOnMobile();
   };
 
+  const libraryReady = () => libraryStatus().kind === "ready";
+
   const create = () => {
+    if (!libraryReady()) return;
     setPendingDelete(null);
     setQuery("");
     closeSettings();
@@ -503,6 +507,7 @@ export default function AppSidebar() {
           aria-label="New document"
           title={shortcutTitle("New document", shortcutKeys("new-document"), mac)}
           aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("new-document"), mac)}
+          disabled={!libraryReady()}
           onClick={create}
         >
           <Icon name="plus" size={15} />
