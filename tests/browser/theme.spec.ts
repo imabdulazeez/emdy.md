@@ -250,3 +250,24 @@ test("every face is a system font, so no font file is preloaded or requested", a
   expect(requests.filter((request) => request.resourceType === "font")).toEqual([]);
   expect(await page.evaluate(() => document.fonts.size)).toBe(0);
 });
+
+for (const { scheme, selection } of [
+  { scheme: "dark", selection: "rgb(43, 53, 102)" },
+  { scheme: "light", selection: "rgb(216, 223, 250)" },
+] as const) {
+  test(`a focused ${scheme} selection uses the theme's selection colour`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await seedLibrary(page);
+    const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+    await expect(editor).toBeVisible();
+    await settle(page, scheme);
+
+    await editor.locator(".cm-line").first().click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Shift+Home");
+
+    const highlight = page.locator(".cm-editor.cm-focused .cm-selectionBackground").first();
+    await expect(highlight).toBeVisible();
+    await expect(highlight).toHaveCSS("background-color", selection);
+  });
+}

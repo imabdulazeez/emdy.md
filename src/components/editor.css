@@ -639,7 +639,7 @@
 }
 
 .editor-host .cm-selectionBackground,
-.editor-host .cm-editor.cm-focused .cm-selectionBackground,
+.editor-host .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
 .editor-host .cm-content ::selection {
   background: var(--color-selection);
 }
