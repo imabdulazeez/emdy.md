@@ -4,6 +4,7 @@ import {
   collectStyles,
   findPrintFrame,
   PRINT_FRAME_TITLE,
+  PRINT_FONT_UI,
   PRINT_STYLES,
   printHtml,
 } from "./print";
@@ -37,6 +38,11 @@ describe("buildPrintDocument", () => {
 
   it("lets printed code wrap inside its block instead of growing to its longest line", () => {
     expect(PRINT_STYLES).toMatch(/\.preview-content pre code \{\s*width: auto;\s*\}/);
+  });
+
+  it("swaps the unembeddable system-ui face for one that prints as selectable text", () => {
+    expect(PRINT_FONT_UI).not.toMatch(/system-ui|-apple-system/);
+    expect(PRINT_STYLES).toContain(`:root { --font-ui: ${PRINT_FONT_UI}; }`);
   });
 
   it("carries the document font so the printed page uses the same system face", () => {
