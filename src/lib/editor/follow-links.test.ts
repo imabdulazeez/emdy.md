@@ -3,6 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEditorExtensions } from "./extensions";
 import { livePreview } from "./live-preview";
+import { isMacPlatform } from "~/lib/shortcuts";
 import { followLinks, linkHrefAt, readOnlyPreview } from "./follow-links";
 
 let view: EditorView | undefined;
@@ -60,6 +61,14 @@ describe("linkHrefAt", () => {
     expect(linkHrefAt(state, doc.indexOf("me@"))).toBe("mailto:me@example.com");
     expect(linkHrefAt(state, doc.indexOf("missing"))).toBeNull();
   });
+
+  it("reads a bare URL pasted into text", () => {
+    const doc = "Visit https://example.com/docs or www.example.org today.";
+    const { state } = mount(doc).view;
+    expect(linkHrefAt(state, doc.indexOf("example.com"))).toBe("https://example.com/docs");
+    expect(linkHrefAt(state, doc.indexOf("www"))).toBe("https://www.example.org");
+    expect(linkHrefAt(state, doc.indexOf("today"))).toBeNull();
+  });
 });
 
 describe("followLinks in the read-only preview", () => {
@@ -111,6 +120,18 @@ describe("followLinks in the read-only preview", () => {
     linkNamed(editor, "site").click();
     expect(hooks.openExternal).toHaveBeenCalledWith("https://example.com");
     expect(hooks.followLocal).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders a bare URL as a focusable link that opens on click and Enter", () => {
+    const { view: editor, hooks } = mount("Visit https://example.com/docs today");
+    const link = linkNamed(editor, "https://example.com/docs");
+    expect(link.tagName).toBe("A");
+    expect(link.getAttribute("role")).toBe("link");
+    expect(link.hasAttribute("href")).toBe(false);
+    link.click();
+    expect(hooks.openExternal).toHaveBeenCalledWith("https://example.com/docs");
+    link.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(hooks.openExternal).toHaveBeenCalledTimes(2);
   });
 
   it("renders links as focusable links that open with Enter", () => {
@@ -196,6 +217,37 @@ describe("followLinks in the editable preview", () => {
     expect(link.tagName).not.toBe("A");
     link.click();
     expect(hooks.followLocal).not.toHaveBeenCalled();
+  });
+
+  it("leaves a plain click on a bare URL to place the cursor", () => {
+    const { view: editor, hooks } = mount("Visit https://example.com/docs today", false);
+    const link = linkNamed(editor, "https://example.com/docs");
+    expect(link.tagName).not.toBe("A");
+    link.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    link.click();
+    expect(hooks.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("opens bare URLs and inline links on a Mod-click without moving the selection", () => {
+    const doc = "Visit https://example.com/docs and [notes](Notes.md)";
+    const { view: editor, hooks } = mount(doc, false);
+    const mac = isMacPlatform();
+    const modClick = (element: HTMLElement) => {
+      const event = new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        metaKey: mac,
+        ctrlKey: !mac,
+      });
+      element.dispatchEvent(event);
+      return event;
+    };
+    expect(modClick(linkNamed(editor, "https://example.com/docs")).defaultPrevented).toBe(true);
+    expect(hooks.openExternal).toHaveBeenCalledWith("https://example.com/docs");
+    modClick(linkNamed(editor, "notes"));
+    expect(hooks.followLocal).toHaveBeenCalledWith("Notes.md");
+    expect(editor.state.selection.ranges).toHaveLength(1);
+    expect(editor.state.doc.toString()).toBe(doc);
   });
 });
 

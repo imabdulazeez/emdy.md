@@ -11,6 +11,7 @@ import {
 import { COPY_FEEDBACK_MS, copyText } from "~/lib/clipboard";
 import { fenceLabel } from "./fence-info";
 import { ImageWidget, readImage } from "./image-widget";
+import { isBareUrl } from "./link-destination";
 import { liveTables } from "./table-widget";
 
 export { COPY_FEEDBACK_MS };
@@ -356,9 +357,9 @@ function buildDecorations(view: EditorView): {
           return false;
         }
 
-        const inlineClass = INLINE_CLASSES[name];
+        const inlineClass = isBareUrl(node.node) ? "cm-live-link" : INLINE_CLASSES[name];
         if (inlineClass && from < to) {
-          const link = state.readOnly && (name === "Link" || name === "Autolink");
+          const link = state.readOnly && inlineClass === "cm-live-link";
           ranges.push(
             (link ? READER_LINK : Decoration.mark({ class: inlineClass })).range(from, to),
           );

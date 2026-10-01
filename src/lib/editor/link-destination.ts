@@ -49,9 +49,16 @@ export function linkDestination(state: EditorState, link: SyntaxNode): string {
   return linkReferences(state).get(normalizeLabel(key)) ?? "";
 }
 
-/** The target a Link or Autolink node points at, with `mailto:` added to a bare email autolink. */
+const URL_OWNERS = new Set(["Link", "Image", "Autolink", "LinkReference"]);
+
+export function isBareUrl(node: SyntaxNode): boolean {
+  return node.name === "URL" && !URL_OWNERS.has(node.parent?.name ?? "");
+}
+
+/** The target a Link, Autolink, or bare URL node points at, with `mailto:` added to a bare email and `https://` to a `www.` address. */
 export function linkHref(state: EditorState, node: SyntaxNode): string {
-  if (node.name !== "Autolink") return linkDestination(state, node);
+  if (node.name !== "Autolink" && !isBareUrl(node)) return linkDestination(state, node);
   const raw = cleanUrl(state.sliceDoc(node.from, node.to));
+  if (/^www\./i.test(raw)) return `https://${raw}`;
   return !URL_SCHEME.test(raw) && raw.includes("@") ? `mailto:${raw}` : raw;
 }

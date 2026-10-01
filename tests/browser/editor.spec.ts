@@ -1,5 +1,11 @@
 import { test, expect, seedLibrary } from "./fixtures";
 
+declare global {
+  interface Window {
+    __emdyOpened?: string[];
+  }
+}
+
 test("reload keeps a new document and route, and an unknown route falls back to the last document", async ({
   page,
 }) => {
@@ -278,4 +284,46 @@ test("typing a numbered list marker in editable preview keeps the caret after it
   await page.keyboard.press("Enter");
   await page.keyboard.type("second");
   await expect(editor.locator(".cm-line").nth(1)).toHaveText("2. second");
+});
+
+test("a pasted URL opens from the reader on a click and from the editable preview on a Mod-click", async ({
+  page,
+  requests,
+}) => {
+  await page.addInitScript(() => {
+    window.open = (url) => {
+      (window.__emdyOpened ??= []).push(String(url));
+      return null;
+    };
+  });
+  await seedLibrary(page);
+  await page.getByRole("button", { name: "New document", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await editor.click();
+  await page.keyboard.insertText("Intro\n\nRead https://example.com/docs today\n\nAfter");
+  const opened = () => page.evaluate(() => window.__emdyOpened ?? []);
+
+  await page.keyboard.press("ControlOrMeta+3");
+  const preview = page.getByRole("document", { name: "Preview", exact: true });
+  const readerLink = preview.getByRole("link", { name: "https://example.com/docs", exact: true });
+  await readerLink.click();
+  await expect.poll(opened).toEqual(["https://example.com/docs"]);
+  await readerLink.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(opened).toHaveLength(2);
+
+  await page.keyboard.press("ControlOrMeta+2");
+  const url = editor.locator(".cm-live-link", { hasText: "https://example.com/docs" });
+  await url.click();
+  await page.keyboard.insertText("x");
+  await expect(editor).not.toContainText("Read https://example.com/docs today");
+  expect(await opened()).toHaveLength(2);
+  await page.keyboard.press("Backspace");
+  await expect(editor).toContainText("Read https://example.com/docs today");
+
+  await url.click({ modifiers: ["ControlOrMeta"] });
+  await expect.poll(opened).toHaveLength(3);
+  expect((await opened())[2]).toBe("https://example.com/docs");
+  await expect(editor).toContainText("Read https://example.com/docs today");
+  expect(requests.filter((request) => request.url.includes("example.com"))).toEqual([]);
 });

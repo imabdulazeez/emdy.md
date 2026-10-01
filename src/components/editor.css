@@ -229,6 +229,7 @@
 }
 
 .editor-host .cm-live-link {
+  --color-syntax-url: var(--color-syntax-link);
   color: var(--color-syntax-link);
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--color-accent) 35%, transparent);

@@ -2,7 +2,7 @@ import { syntaxTree } from "@codemirror/language";
 import { StateField, type EditorState, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemirror/view";
 import { isExternalHref, isSafeHref, LOCAL_LINK_ATTR } from "~/lib/markdown/href";
-import { cleanUrl, linkDestination, linkHref } from "./link-destination";
+import { cleanUrl, isBareUrl, linkDestination, linkHref } from "./link-destination";
 import { TABLE_COPY_TRIGGER_HTML } from "~/lib/table-clipboard";
 import { requestTableCopy } from "./table-copy";
 import {
@@ -108,9 +108,10 @@ export function renderInline(ctx: RenderContext, node: SyntaxNode, into: HTMLEle
 }
 
 function renderNode(ctx: RenderContext, node: SyntaxNode, into: HTMLElement): void {
-  if (SKIPPED_NODES.has(node.name)) return;
+  const bare = isBareUrl(node);
+  if (!bare && SKIPPED_NODES.has(node.name)) return;
   const { state } = ctx;
-  switch (node.name) {
+  switch (bare ? "Autolink" : node.name) {
     case "StrongEmphasis":
       return renderWrapped(ctx, node, into, "strong");
     case "Emphasis":

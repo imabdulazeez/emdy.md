@@ -2,7 +2,8 @@ import { syntaxTree } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import { isExternalHref, isSafeHref, LOCAL_LINK_ATTR } from "~/lib/markdown/href";
-import { linkHref } from "./link-destination";
+import { isMacPlatform } from "~/lib/shortcuts";
+import { isBareUrl, linkHref } from "./link-destination";
 
 type SyntaxNode = ReturnType<typeof syntaxTree>["topNode"];
 
@@ -13,7 +14,9 @@ export interface LinkHooks {
 
 export function linkHrefAt(state: EditorState, pos: number): string | null {
   for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1); node;) {
-    if (node.name === "Link" || node.name === "Autolink") return linkHref(state, node) || null;
+    if (node.name === "Link" || node.name === "Autolink" || isBareUrl(node)) {
+      return linkHref(state, node) || null;
+    }
     node = node.parent;
   }
   return null;
@@ -53,11 +56,24 @@ export function followLinks(hooks: LinkHooks): Extension {
       event.preventDefault();
       follow(href);
     };
+    const modOpen = (event: MouseEvent) => {
+      if (event.button !== 0 || view.state.readOnly) return;
+      if (!(isMacPlatform() ? event.metaKey : event.ctrlKey)) return;
+      const link = event.target instanceof Element ? event.target.closest(".cm-live-link") : null;
+      if (!link || !view.contentDOM.contains(link)) return;
+      const href = linkHrefAt(view.state, view.posAtDOM(link));
+      if (!href) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      follow(href);
+    };
+    view.contentDOM.addEventListener("mousedown", modOpen, true);
     view.contentDOM.addEventListener("click", open);
     view.contentDOM.addEventListener("auxclick", open);
     view.contentDOM.addEventListener("keydown", activate);
     return {
       destroy() {
+        view.contentDOM.removeEventListener("mousedown", modOpen, true);
         view.contentDOM.removeEventListener("click", open);
         view.contentDOM.removeEventListener("auxclick", open);
         view.contentDOM.removeEventListener("keydown", activate);
