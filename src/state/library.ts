@@ -107,13 +107,14 @@ async function open(directory: Directory): Promise<void> {
     },
   });
   const loaded = await opened.load();
-  library = opened;
   const outside = await loadOpenedFiles(loaded.map((doc) => doc.id));
   const records = loadDocuments([...loaded, ...outside]);
   useLinkCatalog(opened);
   tracked = new Map(records.map((doc) => [doc.id, doc]));
+  library = opened;
   setSaveError(null);
   setStatus({ kind: "ready" });
+  flush();
   for (const listener of readyListeners) listener();
 }
 
@@ -218,13 +219,15 @@ export function trackLibrary(win: TrackingWindow = window): void {
   });
 }
 
-export async function retryLibrarySave(): Promise<void> {
+export async function retryLibrarySave(): Promise<boolean> {
   try {
     await flushLibrary();
     setSaveError(null);
     clearOpenedFileError();
+    return true;
   } catch (error) {
     setSaveError(describe(error));
+    return false;
   }
 }
 

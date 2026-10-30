@@ -1,4 +1,5 @@
-import { writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -144,8 +145,52 @@ test("Mod-N creates a document in the desktop app, where the browser needs Mod-A
   await expect(editor).toBeFocused();
   await page.keyboard.type("Made with the shortcut");
   await expect
-    .poll(() => readFolderFile(sandbox.folder, "Untitled.md"))
+    .poll(() => readFolderFile(sandbox.folder, "Made with the shortcut.md"))
     .toBe("Made with the shortcut");
+  await expect.poll(() => readFolderFile(sandbox.folder, "Untitled.md")).toBeNull();
   expect(await readFolderFile(sandbox.folder, "First page.md")).toBe("# First page");
   expect(page.context().pages()).toHaveLength(1);
+});
+
+test("a documents folder emdy can't create shows a retry instead of quitting", async () => {
+  test.skip(process.platform === "win32", "Folder permissions work differently on Windows");
+  const parent = join(sandbox.folder, "Documents");
+  await mkdir(parent);
+  await chmod(parent, 0o500);
+  sandbox.folder = join(parent, "emdy");
+  try {
+    const { page } = await open();
+    await expect(page.getByRole("heading", { name: "Couldn’t open your documents" })).toBeVisible();
+    await chmod(parent, 0o700);
+    await page.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Welcome to emdy", level: 1 })).toBeVisible();
+    await createDocument(page, "Made it", "# Made it");
+    await expect.poll(() => readFolderFile(sandbox.folder, "Made it.md")).toBe("# Made it");
+  } finally {
+    await chmod(parent, 0o700);
+  }
+});
+
+test("editing a symlinked document writes through the link and keeps it", async () => {
+  test.skip(process.platform === "win32", "Creating symlinks needs extra rights on Windows");
+  const elsewhere = await mkdtemp(join(tmpdir(), "emdy-desktop-linked-"));
+  try {
+    const real = join(elsewhere, "Linked.md");
+    await writeFile(real, "# Linked\n\nkept in another repo");
+    await symlink(real, join(sandbox.folder, "Linked.md"));
+    const { page } = await open();
+    const sidebar = page.getByRole("list", { name: "Documents", exact: true });
+    await sidebar.getByRole("button", { name: "Linked", exact: true }).click();
+    const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+    await expect(editor).toContainText("kept in another repo");
+    await editor.press("ControlOrMeta+End");
+    await page.keyboard.type(" and edited in emdy");
+    await expect
+      .poll(() => readFolderFile(elsewhere, "Linked.md"))
+      .toBe("# Linked\n\nkept in another repo and edited in emdy");
+    expect((await lstat(join(sandbox.folder, "Linked.md"))).isSymbolicLink()).toBe(true);
+    expect(await readdir(elsewhere)).toEqual(["Linked.md"]);
+  } finally {
+    await rm(elsewhere, { recursive: true, force: true });
+  }
 });

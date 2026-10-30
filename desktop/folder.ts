@@ -1,5 +1,16 @@
-import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { FileInfo } from "../src/lib/storage/directory";
 import type { FolderFailure, FolderResult } from "../src/lib/desktop/bridge";
 
@@ -10,6 +21,7 @@ export interface FolderAccessOptions {
   root: () => string;
   session: () => number;
   onWrite?: (path: readonly string[], name: string) => void;
+  createRoot?: () => boolean;
   platform?: NodeJS.Platform;
 }
 
@@ -96,8 +108,18 @@ async function settle<T>(subject: string, task: () => Promise<T>): Promise<Folde
   }
 }
 
-export function stagingName(counter: number): string {
-  return `.emdy-write-${process.pid}-${counter}.tmp`;
+export function stagingName(): string {
+  return `.emdy-write-${randomUUID()}.tmp`;
+}
+
+export async function writeTarget(path: string): Promise<{ path: string; mode?: number }> {
+  try {
+    const real = await realpath(path);
+    return { path: real, mode: (await stat(real)).mode & 0o777 };
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return { path };
+    throw error;
+  }
 }
 
 export async function writeStaged(
@@ -115,8 +137,11 @@ export async function writeStaged(
       await rm(staged, { force: true });
       throw error;
     }
-    await writeFile(target, text, "utf8");
-    await rm(staged, { force: true });
+    try {
+      await writeFile(target, text, "utf8");
+    } finally {
+      await rm(staged, { force: true });
+    }
   }
 }
 
@@ -130,7 +155,6 @@ function toInfo(name: string, size: number, mtimeMs: number): FileInfo {
 
 export function createFolderAccess(options: FolderAccessOptions): FolderAccess {
   const platform = options.platform ?? process.platform;
-  let temporary = 0;
 
   const segments = (session: unknown, path: unknown): string[] => {
     if (session !== options.session())
@@ -157,9 +181,11 @@ export function createFolderAccess(options: FolderAccessOptions): FolderAccess {
         try {
           info = await stat(root);
         } catch (error) {
-          if (errorCode(error) === "ENOENT")
+          if (errorCode(error) !== "ENOENT") throw error;
+          if (!options.createRoot?.())
             throw new FolderFault("NotFoundError", `The folder “${root}” can’t be found.`);
-          throw error;
+          await mkdir(root, { recursive: true });
+          info = await stat(root);
         }
         if (!info.isDirectory())
           throw new FolderFault("TypeMismatchError", `“${root}” is not a folder.`);
@@ -201,10 +227,10 @@ export function createFolderAccess(options: FolderAccessOptions): FolderAccess {
       settle(subject(name), async () => {
         if (typeof text !== "string") throw invalid("Only text can be written.");
         const target = locate(session, path, name);
-        const parts = segments(session, path);
-        const staged = join(options.root(), ...parts, stagingName(++temporary));
-        options.onWrite?.(parts, name as string);
-        await writeStaged(target, staged, text, platform);
+        options.onWrite?.(segments(session, path), name as string);
+        const real = await writeTarget(target);
+        const staged = join(dirname(real.path), stagingName());
+        await writeStaged(real.path, staged, text, platform, real.mode);
         return null;
       }),
     remove: (session, path, name) =>

@@ -148,7 +148,6 @@ export function createOpenedFiles(options: OpenedFilesOptions): OpenedFiles {
   let entries: OpenedFileEntry[] = [];
   let taken = new Set<string>();
   let requests: OpenRequest[] = [];
-  let temporary = 0;
   let queue: Promise<unknown> = Promise.resolve();
 
   const serial = <T>(task: () => Promise<T>): Promise<T> => {
@@ -182,7 +181,7 @@ export function createOpenedFiles(options: OpenedFilesOptions): OpenedFiles {
 
   const write = async (path: string, text: string, mode?: number) => {
     options.onWrite?.(path);
-    await writeStaged(path, join(dirname(path), stagingName(++temporary)), text, platform, mode);
+    await writeStaged(path, join(dirname(path), stagingName()), text, platform, mode);
   };
 
   const settle = async <T>(subject: string, task: () => Promise<T>): Promise<FolderResult<T>> => {

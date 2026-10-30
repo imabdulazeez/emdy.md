@@ -99,7 +99,7 @@ export async function chooseLibraryFolder(
   bridge: DesktopBridge | null = desktopBridge(),
 ): Promise<boolean> {
   if (!bridge) return false;
-  await retryLibrarySave();
+  if (!(await retryLibrarySave())) return false;
   const chosen = await bridge.library.choose();
   if (!chosen) return false;
   setLocation(() => chosen);

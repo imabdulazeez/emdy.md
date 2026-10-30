@@ -11,7 +11,7 @@ import {
   type IpcMainInvokeEvent,
   type OpenDialogOptions,
 } from "electron";
-import { mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   APP_ORIGIN,
@@ -74,6 +74,7 @@ protocol.registerSchemesAsPrivileged([
 const writes = createWriteLog();
 const guards = new Map<number, CloseGuard>();
 let libraryFolder = "";
+let creatableFolder: string | null = null;
 let librarySession = 1;
 let stopWatching: () => void = () => {};
 let quitting = false;
@@ -83,6 +84,7 @@ const waitingPaths: string[] = [];
 const folder = createFolderAccess({
   root: () => libraryFolder,
   session: () => librarySession,
+  createRoot: () => libraryFolder === creatableFolder,
   onWrite: (path, name) => {
     if (path.length === 0) writes.record(name);
   },
@@ -151,7 +153,7 @@ function watchLibrary(): void {
 async function useLibraryFolder(next: string, remember: boolean): Promise<void> {
   libraryFolder = next;
   librarySession++;
-  watchLibrary();
+  stopWatching();
   if (remember) await writeDesktopConfig(configFile(), { libraryFolder: next });
 }
 
@@ -160,7 +162,7 @@ async function loadLibraryFolder(): Promise<void> {
   const override = development ? process.env.EMDY_LIBRARY_FOLDER : undefined;
   const config = await readDesktopConfig(configFile(), { libraryFolder: fallback });
   const chosen = override ?? config.libraryFolder;
-  if (chosen === fallback || chosen === override) await mkdir(chosen, { recursive: true });
+  creatableFolder = chosen === fallback || chosen === override ? chosen : null;
   await useLibraryFolder(chosen, false);
 }
 
@@ -180,7 +182,11 @@ function handle(
 }
 
 function registerIpc(): void {
-  handle(CHANNELS.folderOpen, () => folder.open());
+  handle(CHANNELS.folderOpen, async () => {
+    const result = await folder.open();
+    if (result.ok) watchLibrary();
+    return result;
+  });
   handle(CHANNELS.folderEnsure, (_event, token, path) => folder.ensure(token, path));
   handle(CHANNELS.folderList, (_event, token, path) => folder.list(token, path));
   handle(CHANNELS.folderStat, (_event, token, path, name) => folder.stat(token, path, name));

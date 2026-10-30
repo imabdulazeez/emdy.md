@@ -82,6 +82,24 @@ describe("seedDictionaries", () => {
     expect(await readFile(join(target, "en-US-10-1.bdic"), "utf8")).toBe("fresh words");
   });
 
+  it("leaves out a language whose dictionary can't be copied", async () => {
+    const source = join(dir, "bundled");
+    const target = join(dir, "Dictionaries");
+    await mkdir(source);
+    await mkdir(join(target, "fr-FR-3-0.bdic"), { recursive: true });
+    await writeFile(join(source, "en-US-10-1.bdic"), "english");
+    await writeFile(join(source, "fr-FR-3-0.bdic"), "français");
+    expect(await seedDictionaries(source, target)).toEqual(["en-US"]);
+  });
+
+  it("returns no languages when the dictionaries folder can't be made", async () => {
+    const source = join(dir, "bundled");
+    await mkdir(source);
+    await writeFile(join(source, "en-US-10-1.bdic"), "english");
+    await writeFile(join(dir, "blocked"), "a file");
+    expect(await seedDictionaries(source, join(dir, "blocked", "Dictionaries"))).toEqual([]);
+  });
+
   it("returns no languages when nothing is bundled", async () => {
     expect(await seedDictionaries(join(dir, "missing"), join(dir, "Dictionaries"))).toEqual([]);
   });

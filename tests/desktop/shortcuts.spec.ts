@@ -93,7 +93,8 @@ test("a shortcut that is also in the menu bar runs its command once", async () =
   await editor.focus();
   await page.keyboard.type("Kept by Save");
   await page.keyboard.press("ControlOrMeta+KeyS");
-  await expect.poll(() => readFolderFile(sandbox.folder, "Untitled.md")).toBe("Kept by Save");
+  await expect.poll(() => readFolderFile(sandbox.folder, "Kept by Save.md")).toBe("Kept by Save");
+  await expect.poll(() => readFolderFile(sandbox.folder, "Untitled.md")).toBeNull();
   await expect(editor).toHaveText("Kept by Save");
   await expect(page.locator("[data-document-row]")).toHaveCount(1);
 });

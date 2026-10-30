@@ -52,14 +52,20 @@ export async function seedDictionaries(source: string, target: string): Promise<
   let files: string[];
   try {
     files = (await readdir(source)).filter((file) => dictionaryLanguage(file) !== null);
+    await mkdir(target, { recursive: true });
   } catch {
     return [];
   }
-  await mkdir(target, { recursive: true });
+  const seeded: string[] = [];
   for (const file of files) {
     const from = join(source, file);
     const to = join(target, file);
-    if ((await sizeOf(to)) !== (await sizeOf(from))) await copyFile(from, to);
+    try {
+      if ((await sizeOf(to)) !== (await sizeOf(from))) await copyFile(from, to);
+      seeded.push(file);
+    } catch {
+      continue;
+    }
   }
-  return dictionaryLanguages(files);
+  return dictionaryLanguages(seeded);
 }

@@ -1,9 +1,12 @@
 import {
+  chmod,
+  lstat,
   mkdtemp,
   mkdir,
   readFile,
   readdir,
   rm,
+  stat,
   symlink,
   utimes,
   writeFile,
@@ -11,7 +14,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { createFolderAccess, describeFailure, FolderFault, isSafeSegment } from "./folder";
+import {
+  createFolderAccess,
+  describeFailure,
+  FolderFault,
+  isSafeSegment,
+  stagingName,
+  writeStaged,
+} from "./folder";
 
 let root: string;
 let session: number;
@@ -80,6 +90,36 @@ describe("createFolderAccess", () => {
     });
   });
 
+  it("creates the default folder when it is missing", async () => {
+    const missing = join(root, "Documents", "emdy");
+    const result = await createFolderAccess({
+      root: () => missing,
+      session: () => 1,
+      createRoot: () => true,
+    }).open();
+    expect(result).toEqual({ ok: true, value: 1 });
+    expect((await stat(missing)).isDirectory()).toBe(true);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "reports a default folder it isn't allowed to create instead of throwing",
+    async () => {
+      const locked = join(root, "locked");
+      await mkdir(locked);
+      await chmod(locked, 0o500);
+      try {
+        const result = await createFolderAccess({
+          root: () => join(locked, "emdy"),
+          session: () => 1,
+          createRoot: () => true,
+        }).open();
+        expect(result).toMatchObject({ ok: false, error: { name: "NotAllowedError" } });
+      } finally {
+        await chmod(locked, 0o700);
+      }
+    },
+  );
+
   it("refuses to open a file as the documents folder", async () => {
     const file = join(root, "file.md");
     await writeFile(file, "x");
@@ -96,6 +136,27 @@ describe("createFolderAccess", () => {
     expect(onWrite).toHaveBeenCalledWith([], "Notes.md");
     await folder.write(1, [], "Notes.md", "# Replaced\n");
     expect(await readFile(join(root, "Notes.md"), "utf8")).toBe("# Replaced\n");
+  });
+
+  it("writes through a symlinked document and keeps the link", async () => {
+    const elsewhere = await mkdtemp(join(tmpdir(), "emdy-elsewhere-"));
+    try {
+      await writeFile(join(elsewhere, "notes.md"), "old");
+      await symlink(join(elsewhere, "notes.md"), join(root, "notes.md"));
+      expect(await access().write(1, [], "notes.md", "new")).toEqual({ ok: true, value: null });
+      expect((await lstat(join(root, "notes.md"))).isSymbolicLink()).toBe(true);
+      expect(await readFile(join(elsewhere, "notes.md"), "utf8")).toBe("new");
+      expect(await readdir(elsewhere)).toEqual(["notes.md"]);
+    } finally {
+      await rm(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32")("keeps a document's permissions", async () => {
+    await writeFile(join(root, "Private.md"), "a", { mode: 0o600 });
+    await access().write(1, [], "Private.md", "b");
+    expect(await readFile(join(root, "Private.md"), "utf8")).toBe("b");
+    expect((await stat(join(root, "Private.md"))).mode & 0o777).toBe(0o600);
   });
 
   it("lists files with byte sizes and whole-millisecond times, skipping folders", async () => {
@@ -182,4 +243,31 @@ describe("createFolderAccess", () => {
     expect(await readdir(root)).toEqual([]);
     expect(await folder.write(2, [], "fresh.md", "x")).toEqual({ ok: true, value: null });
   });
+});
+
+describe("stagingName", () => {
+  it("gives every write its own hidden staging file", () => {
+    const first = stagingName();
+    expect(first).toMatch(/^\.emdy-write-[0-9a-f-]+\.tmp$/);
+    expect(stagingName()).not.toBe(first);
+  });
+});
+
+describe("writeStaged", () => {
+  it.skipIf(process.platform === "win32")(
+    "removes the staging file when the in-place fallback fails too",
+    async () => {
+      const locked = join(root, "locked");
+      await mkdir(locked);
+      await chmod(locked, 0o500);
+      try {
+        await expect(
+          writeStaged(join(locked, "Notes.md"), join(root, stagingName()), "text", "win32"),
+        ).rejects.toMatchObject({ code: "EACCES" });
+        expect(await readdir(root)).toEqual(["locked"]);
+      } finally {
+        await chmod(locked, 0o700);
+      }
+    },
+  );
 });

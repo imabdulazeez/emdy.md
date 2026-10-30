@@ -168,6 +168,27 @@ describe("chooseLibraryFolder", () => {
     expect(Object.keys(next.files())).toEqual(["Elsewhere.md"]);
   });
 
+  it("stays on the current folder while its unsaved edits can't be written", async () => {
+    const { bridge, folder } = await openDesktop();
+    track(eventWindow());
+    const write = folder.write;
+    folder.write = async () => {
+      throw new Error("The drive was disconnected.");
+    };
+    flush(() => setDocText("# Welcome to emdy\n\nstranded"));
+    const choose = vi.fn(bridge.library.choose);
+    bridge.library.choose = choose;
+    bridge.setChoice({ path: "/Users/ada/Elsewhere", name: "Elsewhere" });
+    expect(await chooseLibraryFolder(bridge)).toBe(false);
+    flush();
+    expect(choose).not.toHaveBeenCalled();
+    expect(librarySaveError()).toContain("The drive was disconnected.");
+    expect(libraryLocation()).toBeNull();
+    folder.write = write;
+    expect(await chooseLibraryFolder(bridge)).toBe(true);
+    expect(folder.files()["Welcome to emdy.md"]).toBe("# Welcome to emdy\n\nstranded");
+  });
+
   it("keeps the current library when the picker is cancelled", async () => {
     const { bridge } = await openDesktop();
     expect(await chooseLibraryFolder(bridge)).toBe(false);
@@ -294,6 +315,24 @@ describe("opened files", () => {
     const win = eventWindow();
     track(win);
     const stop = startDesktopSync(bridge, win);
+    await vi.waitFor(() => {
+      flush();
+      expect(activeDocumentId()).toBe(id);
+    });
+    stop();
+  });
+
+  it("opens a file requested at launch when sync starts before the library", async () => {
+    const folder = createMemoryDirectory();
+    await seedDirectory(folder, TEST_DOCUMENTS);
+    const bridge = createMemoryBridge(folder);
+    const id = bridge.openFile("Launch.md", "# Launch");
+    restore = useLibraryDirectory(() => createDesktopDirectory(bridge, locks));
+    restoreBridge = useOpenedFilesBridge(bridge);
+    const win = eventWindow();
+    track(win);
+    const stop = startDesktopSync(bridge, win);
+    await startLibrary();
     await vi.waitFor(() => {
       flush();
       expect(activeDocumentId()).toBe(id);

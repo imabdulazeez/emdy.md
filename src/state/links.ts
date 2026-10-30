@@ -15,6 +15,7 @@ import {
 import { activeDocumentId, documents, findDocument, title, updateDocumentText } from "./document";
 import { editorApi } from "./editor-api";
 import { currentDocumentPath, type NavigationWindow } from "./navigation";
+import { ownsDocument } from "./opened-files";
 
 export interface LinkCatalogEntry {
   id: string;
@@ -89,6 +90,7 @@ export function rewriteDocumentLinks(renames: readonly DocumentRename[]): void {
   const active = untrack(activeDocumentId);
   const editor = untrack(editorApi);
   for (const doc of untrack(documents)) {
+    if (ownsDocument(doc.id)) continue;
     const live = doc.id === active ? editor : null;
     const text = live ? live.getText() : doc.text;
     const edits = documentLinkEdits(text, renames);
