@@ -18,7 +18,7 @@ import {
   syncOpenedFiles,
 } from "./library";
 import { closeSettings } from "./navigation";
-import { ownsDocument } from "./opened-files";
+import { hasUnsavedOpenedFiles, ownsDocument } from "./opened-files";
 
 const [location, setLocation] = createSignal<LibraryLocation | null>(null);
 
@@ -124,6 +124,7 @@ export function startDesktopSync(
   const stopClose = bridge.window.onBeforeClose(async () => {
     flushPersistence();
     await retryLibrarySave();
+    return !hasUnsavedOpenedFiles();
   });
   const openRequested = () => void openRequestedFiles(bridge);
   const stopRequests = bridge.files.onRequest(openRequested);

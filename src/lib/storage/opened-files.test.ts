@@ -181,4 +181,48 @@ describe("createOpenedFileStore", () => {
     expect(store.has(id)).toBe(false);
     expect(bridge.openedFile(id)).toBeUndefined();
   });
+
+  it("refuses to close a file whose last edits could not be written", async () => {
+    const { bridge, store } = setup();
+    const id = await opened(bridge, "Notes.md", "a");
+    await store.load([]);
+    store.save({ id, title: "Notes", text: "last words", icon: null });
+    const save = bridge.files.save;
+    bridge.files.save = async () => ({
+      ok: false,
+      error: { name: "NotFoundError", message: "gone" },
+    });
+    await expect(store.close(id)).rejects.toThrow("gone");
+    expect(store.has(id)).toBe(true);
+    expect(bridge.closedFiles()).toEqual([]);
+    expect(store.pending()).toBe(true);
+    expect(store.unsaved(id)).toMatchObject({
+      id,
+      title: "Notes",
+      text: "last words",
+      icon: null,
+      fixedTitle: true,
+    });
+
+    bridge.files.save = save;
+    await store.close(id);
+    expect(store.has(id)).toBe(false);
+    expect(store.unsaved(id)).toBeNull();
+  });
+
+  it("closes a clean file even when another file's save fails", async () => {
+    const { bridge, store } = setup();
+    const clean = await opened(bridge, "Clean.md", "a");
+    const broken = await opened(bridge, "Broken.md", "b");
+    await store.load([]);
+    store.save({ id: broken, title: "Broken", text: "edited", icon: null });
+    bridge.files.save = async () => ({
+      ok: false,
+      error: { name: "NotFoundError", message: "gone" },
+    });
+    await store.close(clean);
+    expect(store.has(clean)).toBe(false);
+    expect(store.has(broken)).toBe(true);
+    expect(store.unsaved(broken)?.text).toBe("edited");
+  });
 });

@@ -6,6 +6,7 @@ import {
   applyOpenedFiles,
   clearOpenedFileError,
   closeOpenedFile,
+  hasUnsavedOpenedFiles,
   flushOpenedFiles,
   isOpenedFile,
   loadOpenedFiles,
@@ -67,7 +68,7 @@ describe("loadOpenedFiles", () => {
     const bridge = createMemoryBridge(null);
     bridge.files.list = async () => ({ ok: false, error: { name: "Error", message: "gone" } });
     expect(await loadOpenedFiles([], bridge)).toEqual([]);
-    expect(openedFileError()).toBe("gone");
+    expect(openedFileError()).toContain("gone");
     clearOpenedFileError();
     flush();
     expect(openedFileError()).toBeNull();
@@ -117,6 +118,30 @@ describe("opened file changes", () => {
     flush();
     expect(isOpenedFile(id)).toBe(false);
     await vi.waitFor(() => expect(bridge.closedFiles()).toEqual([id]));
+  });
+
+  it("puts a closed file back, with its edits, when they could not be saved", async () => {
+    const bridge = createMemoryBridge(null);
+    const id = bridge.openFile("Notes.md", "a");
+    await load(bridge);
+    expect(hasUnsavedOpenedFiles()).toBe(false);
+    bridge.files.save = async () => ({
+      ok: false,
+      error: { name: "NotFoundError", message: "gone" },
+    });
+    saveOpenedFile({ id, title: "Notes", text: "last words", icon: null });
+    expect(hasUnsavedOpenedFiles()).toBe(true);
+
+    closeOpenedFile(id);
+    flush();
+    expect(isOpenedFile(id)).toBe(false);
+    await vi.waitFor(() => {
+      flush();
+      expect(isOpenedFile(id)).toBe(true);
+    });
+    expect(bridge.closedFiles()).toEqual([]);
+    expect(hasUnsavedOpenedFiles()).toBe(true);
+    expect(openedFileError()).toContain("gone");
   });
 
   it("surfaces a failed save and clears it once a save succeeds", async () => {

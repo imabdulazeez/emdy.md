@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
@@ -96,6 +96,46 @@ test("a file opened from another folder is edited in place and never copied into
     third.page.getByRole("heading", { name: "Welcome to emdy", level: 1 }),
   ).toBeVisible();
   await expect(otherFolders(third.page)).toHaveCount(0);
+});
+
+test("closing with an opened file that cannot be written asks first and keeps the edits", async () => {
+  const folder = join(outside, "Project");
+  const moved = join(outside, "Project moved");
+  await mkdir(folder);
+  const path = join(folder, "Notes.md");
+  await writeFile(path, "# Notes");
+
+  const session = await open([path]);
+  const { app, page } = session;
+  const editor = editorOf(page);
+  await expect(editor).toContainText("# Notes");
+  await app.evaluate(({ dialog }) => {
+    const answers = { asked: 0 };
+    Object.assign(globalThis, { closeDialogAnswers: answers });
+    dialog.showMessageBox = (async () => {
+      answers.asked++;
+      return { response: 0, checkboxChecked: false };
+    }) as typeof dialog.showMessageBox;
+  });
+  const asked = () =>
+    app.evaluate(
+      () =>
+        (globalThis as unknown as { closeDialogAnswers: { asked: number } }).closeDialogAnswers
+          .asked,
+    );
+
+  await editor.press("ControlOrMeta+End");
+  await page.keyboard.type(" kept");
+  await rename(folder, moved);
+
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  await expect.poll(asked).toBe(1);
+  await expect(editor).toContainText("# Notes kept");
+  expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+
+  await rename(moved, folder);
+  await quit(session);
+  expect(await readFolderFile(folder, "Notes.md")).toBe("# Notes kept");
 });
 
 test("opening a file while the app runs hands it to the open window", async () => {

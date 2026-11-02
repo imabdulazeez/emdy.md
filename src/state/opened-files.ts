@@ -92,7 +92,16 @@ export function closeOpenedFile(id: string): void {
     next.delete(id);
     return next;
   });
-  void store?.close(id).catch(() => undefined);
+  const current = store;
+  void current?.close(id).catch(() => {
+    const unsaved = current.unsaved(id);
+    if (store === current && unsaved)
+      applyOpenedFiles({ added: [unsaved], updated: [], removed: [] });
+  });
+}
+
+export function hasUnsavedOpenedFiles(): boolean {
+  return store?.pending() ?? false;
 }
 
 export async function refreshOpenedFiles(): Promise<void> {

@@ -232,8 +232,8 @@ function registerIpc(): void {
     const path = openedFiles.locate(id);
     if (path) shell.showItemInFolder(path);
   });
-  ipcMain.on(CHANNELS.closeReady, (event) => {
-    if (isTrusted(event)) guards.get(event.sender.id)?.release();
+  ipcMain.on(CHANNELS.closeReady, (event, saved: unknown) => {
+    if (isTrusted(event)) guards.get(event.sender.id)?.release(saved !== false);
   });
 }
 
@@ -321,7 +321,24 @@ function createWindow(): BrowserWindow {
   });
   const contents = window.webContents;
   const id = contents.id;
-  const guard = createCloseGuard(() => contents.send(CHANNELS.beforeClose));
+  const guard = createCloseGuard(
+    () => contents.send(CHANNELS.beforeClose),
+    undefined,
+    undefined,
+    async () => {
+      const { response } = await dialog.showMessageBox(window, {
+        type: "warning",
+        buttons: ["Keep Editing", "Close Without Saving"],
+        defaultId: 0,
+        cancelId: 0,
+        message: "Some edits could not be saved",
+        detail: "A file from another folder could not be written. Closing now loses those edits.",
+      });
+      const discard = response === 1;
+      if (!discard) quitting = false;
+      return discard;
+    },
+  );
   guards.set(id, guard);
 
   window.once("ready-to-show", () => window.show());

@@ -157,24 +157,36 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it("answers a close request once every listener has saved, even if one fails", async () => {
+  it("reports a saved close once every listener has saved", async () => {
     const bridge = createBridge();
-    let finishSave: () => void = () => {};
+    let finishSave: (saved: boolean) => void = () => {};
     bridge.window.onBeforeClose(
       () =>
-        new Promise<void>((resolve) => {
+        new Promise<boolean>((resolve) => {
           finishSave = resolve;
         }),
     );
-    bridge.window.onBeforeClose(() => Promise.reject(new Error("disk")));
-    const removed = vi.fn();
+    bridge.window.onBeforeClose(() => true);
+    const removed = vi.fn(() => true);
     bridge.window.onBeforeClose(removed)();
     electron.emit(CHANNELS.beforeClose);
     await Promise.resolve();
     expect(electron.send).not.toHaveBeenCalled();
-    finishSave();
-    await vi.waitFor(() => expect(electron.send).toHaveBeenCalledWith(CHANNELS.closeReady));
+    finishSave(true);
+    await vi.waitFor(() => expect(electron.send).toHaveBeenCalledWith(CHANNELS.closeReady, true));
     expect(removed).not.toHaveBeenCalled();
+  });
+
+  it("reports an unsaved close when a listener says so or fails", async () => {
+    const bridge = createBridge();
+    const stop = bridge.window.onBeforeClose(() => false);
+    electron.emit(CHANNELS.beforeClose);
+    await vi.waitFor(() => expect(electron.send).toHaveBeenCalledWith(CHANNELS.closeReady, false));
+    stop();
+    electron.send.mockClear();
+    bridge.window.onBeforeClose(() => Promise.reject(new Error("disk")));
+    electron.emit(CHANNELS.beforeClose);
+    await vi.waitFor(() => expect(electron.send).toHaveBeenCalledWith(CHANNELS.closeReady, false));
   });
 
   it("hands menu commands to the page and stops once unsubscribed", () => {
@@ -193,7 +205,7 @@ describe("preload bridge", () => {
   it("answers straight away when nothing needs saving", async () => {
     createBridge();
     electron.emit(CHANNELS.beforeClose);
-    await vi.waitFor(() => expect(electron.send).toHaveBeenCalledWith(CHANNELS.closeReady));
+    await vi.waitFor(() => expect(electron.send).toHaveBeenCalledWith(CHANNELS.closeReady, true));
   });
 
   it("reports the platform the page runs on", () => {

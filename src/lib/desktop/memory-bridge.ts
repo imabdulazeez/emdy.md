@@ -25,7 +25,7 @@ export interface MemoryOpenedFile {
 
 export interface MemoryBridge extends DesktopBridge {
   emitChange: () => void;
-  requestClose: () => Promise<void>;
+  requestClose: () => Promise<boolean>;
   sendCommand: (command: string) => void;
   setLocation: (next: LibraryLocation) => void;
   setChoice: (next: LibraryLocation | null) => void;
@@ -71,7 +71,7 @@ export function createMemoryBridge(
   const closed: string[] = [];
   let requests: OpenRequest[] = [];
   const changeListeners = new Set<() => void>();
-  const closeListeners = new Set<() => Promise<void> | void>();
+  const closeListeners = new Set<() => Promise<boolean> | boolean>();
   const commandListeners = new Set<(command: string) => void>();
   const requestListeners = new Set<() => void>();
   const fileListeners = new Set<() => void>();
@@ -244,7 +244,10 @@ export function createMemoryBridge(
       for (const listener of changeListeners) listener();
     },
     async requestClose() {
-      await Promise.all(Array.from(closeListeners, (listener) => Promise.resolve().then(listener)));
+      const results = await Promise.all(
+        Array.from(closeListeners, (listener) => Promise.resolve().then(listener)),
+      );
+      return results.every(Boolean);
     },
     sendCommand(command) {
       for (const listener of commandListeners) listener(command);

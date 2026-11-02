@@ -7,7 +7,7 @@ export interface CloseGuardTimers {
 
 export interface CloseGuard {
   intercept: (close: () => void) => boolean;
-  release: () => void;
+  release: (saved?: boolean) => void;
 }
 
 const defaultTimers: CloseGuardTimers = {
@@ -19,18 +19,19 @@ export function createCloseGuard(
   requestFlush: () => void,
   timeoutMs: number = CLOSE_TIMEOUT_MS,
   timers: CloseGuardTimers = defaultTimers,
+  confirmDiscard: () => Promise<boolean> = async () => true,
 ): CloseGuard {
-  let state: "open" | "flushing" | "closing" = "open";
+  let state: "open" | "flushing" | "asking" | "closing" = "open";
   let finish: (() => void) | null = null;
+  let timer: unknown = null;
 
   return {
     intercept(close) {
       if (state === "closing") return false;
-      if (state === "flushing") return true;
+      if (state !== "open") return true;
       state = "flushing";
-      const timer = timers.setTimeout(() => finish?.(), timeoutMs);
+      timer = timers.setTimeout(() => finish?.(), timeoutMs);
       finish = () => {
-        if (state !== "flushing") return;
         state = "closing";
         finish = null;
         timers.clearTimeout(timer);
@@ -43,8 +44,24 @@ export function createCloseGuard(
       }
       return true;
     },
-    release() {
-      finish?.();
+    release(saved = true) {
+      if (state !== "flushing") return;
+      if (saved) {
+        finish?.();
+        return;
+      }
+      state = "asking";
+      timers.clearTimeout(timer);
+      void confirmDiscard()
+        .catch(() => false)
+        .then((discard) => {
+          if (discard) {
+            finish?.();
+            return;
+          }
+          state = "open";
+          finish = null;
+        });
     },
   };
 }

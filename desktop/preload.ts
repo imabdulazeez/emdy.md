@@ -51,12 +51,17 @@ function subscribe(channel: string, listener: () => void): () => void {
 }
 
 export function createBridge(): DesktopBridge {
-  const closeListeners = new Set<() => Promise<void> | void>();
+  const closeListeners = new Set<() => Promise<boolean> | boolean>();
 
   ipcRenderer.on(CHANNELS.beforeClose, () => {
     void Promise.allSettled(
       Array.from(closeListeners, (listener) => Promise.resolve().then(listener)),
-    ).then(() => ipcRenderer.send(CHANNELS.closeReady));
+    ).then((results) =>
+      ipcRenderer.send(
+        CHANNELS.closeReady,
+        results.every((result) => result.status === "fulfilled" && result.value),
+      ),
+    );
   });
 
   return {

@@ -226,6 +226,45 @@ describe("startDesktopSync", () => {
     stop();
   });
 
+  it("tells the window when an opened file could not be saved", async () => {
+    let id = "";
+    const { bridge } = await openDesktop((next) => {
+      id = next.openFile("Notes.md", "a");
+    });
+    const win = eventWindow();
+    track(win);
+    const stop = startDesktopSync(bridge, win);
+    expect(await bridge.requestClose()).toBe(true);
+
+    const save = bridge.files.save;
+    bridge.files.save = async () => ({
+      ok: false,
+      error: { name: "NotFoundError", message: "gone" },
+    });
+    flush(() => updateDocumentText(id, "unsaved"));
+    expect(await bridge.requestClose()).toBe(false);
+
+    bridge.files.save = save;
+    expect(await bridge.requestClose()).toBe(true);
+    expect(bridge.openedFile(id)?.text).toBe("unsaved");
+    stop();
+  });
+
+  it("lets the window close when only the journaled library failed to save", async () => {
+    const { bridge } = await openDesktop();
+    const win = eventWindow();
+    track(win);
+    const stop = startDesktopSync(bridge, win);
+    bridge.folder.write = async () => ({
+      ok: false,
+      error: { name: "NotAllowedError", message: "read-only" },
+    });
+    flush(() => setDocText("# Welcome to emdy\n\nkept by the journal"));
+    expect(await bridge.requestClose()).toBe(true);
+    expect(librarySaveError()).toContain("read-only");
+    stop();
+  });
+
   it("stops listening once cleaned up", async () => {
     const { bridge, folder } = await openDesktop();
     const win = eventWindow();

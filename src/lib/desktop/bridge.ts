@@ -85,7 +85,7 @@ export interface OpenedFilesApi {
 }
 
 export interface WindowApi {
-  onBeforeClose: (listener: () => Promise<void> | void) => () => void;
+  onBeforeClose: (listener: () => Promise<boolean> | boolean) => () => void;
   onCommand: (listener: (command: string) => void) => () => void;
 }
 

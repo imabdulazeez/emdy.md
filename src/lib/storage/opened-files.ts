@@ -35,6 +35,7 @@ export interface OpenedFileStore {
   flush(): Promise<void>;
   pending(): boolean;
   has(id: string): boolean;
+  unsaved(id: string): OpenedDocument | null;
 }
 
 interface KnownFile {
@@ -180,7 +181,10 @@ export function createOpenedFileStore(
     },
     async close(id) {
       scheduled.cancel();
-      if (dirty.size > 0) await commit().catch(() => undefined);
+      if (dirty.size > 0)
+        await commit().catch((error: unknown) => {
+          if (dirty.has(id)) throw error;
+        });
       await enqueue(async () => {
         dirty.delete(id);
         known.delete(id);
@@ -193,6 +197,11 @@ export function createOpenedFileStore(
       if (dirty.size > 0) await commit();
     },
     pending: () => dirty.size > 0 || inflight.size > 0 || scheduled.pending(),
+    unsaved(id) {
+      const doc = dirty.get(id);
+      if (!doc) return null;
+      return { ...doc, modified: Date.now(), icon: doc.icon ?? null, fixedTitle: true };
+    },
     has: (id) => known.has(id),
   };
 }
