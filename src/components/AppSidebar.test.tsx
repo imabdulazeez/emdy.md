@@ -36,7 +36,13 @@ import {
   sidebarOpen,
   editorFocusRequested,
 } from "~/state/ui";
-import { pinDocument, pinnedDocumentIds, resetWorkspaceState } from "~/state/workspace";
+import {
+  otherFoldersCollapsed,
+  pinDocument,
+  pinnedDocumentIds,
+  resetWorkspaceState,
+  setOtherFoldersCollapsed,
+} from "~/state/workspace";
 import { automaticDocumentIcon } from "~/lib/document-icon";
 import { ariaKeyShortcuts, isMacPlatform, shortcutTitle } from "~/lib/shortcuts";
 import AppSidebar from "./AppSidebar";
@@ -781,7 +787,7 @@ describe("AppSidebar context menus", () => {
     mount();
     const content = screen
       .getByRole("navigation", { name: "Main" })
-      .closest<HTMLElement>("[data-sidebar=content]")!;
+      .querySelector<HTMLElement>("[data-sidebar=content]")!;
     await rightClick(user, content);
     expect(await screen.findByRole("menu", { name: "Library" })).toBeInTheDocument();
     expect(menuItems()).toEqual(["New document"]);
@@ -797,7 +803,7 @@ describe("AppSidebar context menus", () => {
     mount();
     const content = screen
       .getByRole("navigation", { name: "Main" })
-      .closest<HTMLElement>("[data-sidebar=content]")!;
+      .querySelector<HTMLElement>("[data-sidebar=content]")!;
     await rightClick(user, content);
     await user.click(await screen.findByRole("menuitem", { name: "New document" }));
     expect(documents()).toHaveLength(TEST_DOCUMENTS.length);
@@ -1210,14 +1216,76 @@ describe("AppSidebar opened files", () => {
     delete host[DESKTOP_BRIDGE_KEY];
   });
 
-  it("lists files opened from other folders in their own group, apart from the library", () => {
+  it("lists files opened from other folders in a shelf below the library's scroll area", () => {
     openOutside();
     mount();
-    expect(groupNames()[0]).toBe("Other folders");
+    expect(groupNames()).not.toContain("Other folders");
+    expect(within(documentList()).queryByRole("button", { name: "Outside notes" })).toBeNull();
     expect(namesInGroup("Other folders")).toEqual(["Outside notes"]);
-    expect(within(documentList()).getAllByRole("button", { name: "Outside notes" })).toHaveLength(
-      1,
+    const shelf = screen.getByRole("region", { name: "Other folders" });
+    expect(shelf.closest("[data-sidebar=content]")).toBeNull();
+    expect(shelf.closest("nav")).toBe(screen.getByRole("navigation", { name: "Main" }));
+    expect(screen.getAllByRole("button", { name: "Outside notes" })).toHaveLength(1);
+  });
+
+  it("hides the shelf while searching, where opened files appear among the results", async () => {
+    const user = userEvent.setup();
+    openOutside();
+    mount();
+    await user.type(screen.getByRole("searchbox", { name: "Search documents" }), "Outside");
+    expect(screen.queryByRole("region", { name: "Other folders" })).toBeNull();
+    expect(namesInGroup("Titles")).toEqual(["Outside notes"]);
+  });
+
+  it("collapses and expands the other folders group from its heading", async () => {
+    const user = userEvent.setup();
+    openOutside();
+    mount();
+    const toggle = screen.getByRole("button", { name: "Other folders" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("aria-controls", "documents-opened-list");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("list", { name: "Other folders" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Outside notes" })).toBeNull();
+    expect(otherFoldersCollapsed()).toBe(true);
+    expect(toggle).toHaveTextContent("Other folders(1)");
+    toggle.focus();
+    await user.keyboard("{Enter}");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(namesInGroup("Other folders")).toEqual(["Outside notes"]);
+    expect(otherFoldersCollapsed()).toBe(false);
+  });
+
+  it("starts collapsed when the group was left collapsed", () => {
+    flush(() => setOtherFoldersCollapsed(true));
+    openOutside();
+    mount();
+    expect(screen.getByRole("button", { name: "Other folders" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
     );
+    expect(screen.queryByRole("button", { name: "Outside notes" })).toBeNull();
+  });
+
+  it("keeps the active file visible in the collapsed shelf", () => {
+    flush(() => setOtherFoldersCollapsed(true));
+    openOutside();
+    flush(() =>
+      applyOpenedFiles({
+        added: [{ ...OUTSIDE, id: "out002", title: "Second outside", modified: Date.now() }],
+        updated: [],
+        removed: [],
+      }),
+    );
+    mount();
+    flush(() => openDocument(OUTSIDE.id));
+    const toggle = screen.getByRole("button", { name: "Other folders" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("(2)");
+    expect(namesInGroup("Other folders")).toEqual(["Outside notes"]);
+    flush(() => openDocument(TEST_DOCUMENTS[0].id));
+    expect(screen.queryByRole("list", { name: "Other folders" })).toBeNull();
   });
 
   it("moves a pinned opened file to the pinned group", () => {
@@ -1225,7 +1293,7 @@ describe("AppSidebar opened files", () => {
     flush(() => pinDocument(OUTSIDE.id));
     mount();
     expect(namesInGroup("Pinned")).toEqual(["Outside notes"]);
-    expect(groupNames()).not.toContain("Other folders");
+    expect(screen.queryByRole("region", { name: "Other folders" })).toBeNull();
   });
 
   it("closes an opened file instead of offering to delete it", async () => {
@@ -1236,7 +1304,7 @@ describe("AppSidebar opened files", () => {
     await user.click(screen.getByRole("button", { name: "Close Outside notes" }));
     expect(documents().some((doc) => doc.id === OUTSIDE.id)).toBe(false);
     expect(screen.queryByRole("group", { name: "Delete Outside notes?" })).toBeNull();
-    expect(groupNames()).not.toContain("Other folders");
+    expect(screen.queryByRole("region", { name: "Other folders" })).toBeNull();
   });
 
   it("offers Close rather than Delete in an opened file's context menu", async () => {

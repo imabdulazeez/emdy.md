@@ -36,6 +36,10 @@ export function isPinnedList(value: unknown): value is PinnedList {
   );
 }
 
+export function isFlag(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
 const lastDocument = createPersistedSignal<string | null>({
   key: storageKey("workspace", "last-document"),
   fallback: null,
@@ -56,7 +60,18 @@ const pins = createPersistedSignal<PinnedList>({
   parse: isPinnedList,
 });
 
+const otherFolders = createPersistedSignal<boolean>({
+  key: storageKey("workspace", "other-folders-collapsed"),
+  fallback: false,
+  parse: isFlag,
+});
+
 export const lastDocumentId = lastDocument.value;
+export const otherFoldersCollapsed = otherFolders.value;
+
+export function setOtherFoldersCollapsed(collapsed: boolean): void {
+  if (otherFolders.peek() !== collapsed) otherFolders.set(collapsed);
+}
 export const documentPositions = positions.value;
 export const pinnedDocumentIds = pins.value;
 
@@ -123,4 +138,5 @@ export function resetWorkspaceState(): void {
   lastDocument.reset();
   positions.reset();
   pins.reset();
+  otherFolders.reset();
 }

@@ -7,9 +7,11 @@ import {
   documentPositions,
   forgetPosition,
   isDocumentPosition,
+  isFlag,
   isPinned,
   isPinnedList,
   lastDocumentId,
+  otherFoldersCollapsed,
   pinDocument,
   pinnedDocumentIds,
   rememberDocument,
@@ -17,6 +19,7 @@ import {
   retainPins,
   retainPositions,
   savePosition,
+  setOtherFoldersCollapsed,
   unpinDocument,
 } from "./workspace";
 
@@ -133,11 +136,27 @@ describe("workspace state", () => {
     expect(decodeStored('["abc123"]', isPinnedList, [])).toEqual(["abc123"]);
   });
 
+  it("keeps other folders expanded until the user collapses them, and writes at once", () => {
+    expect(otherFoldersCollapsed()).toBe(false);
+    flush(() => setOtherFoldersCollapsed(true));
+    expect(otherFoldersCollapsed()).toBe(true);
+    expect(window.localStorage.getItem("emdy:workspace:other-folders-collapsed")).toBe("true");
+    flush(() => setOtherFoldersCollapsed(false));
+    expect(window.localStorage.getItem("emdy:workspace:other-folders-collapsed")).toBe("false");
+  });
+
+  it("falls back to expanded other folders when the stored value is invalid", () => {
+    expect(decodeStored('"yes"', isFlag, false)).toBe(false);
+    expect(decodeStored("not json", isFlag, false)).toBe(false);
+    expect(decodeStored("true", isFlag, false)).toBe(true);
+  });
+
   it("resets to defaults and clears storage", () => {
     flush(() => {
       rememberDocument("abc123");
       savePosition("abc123", { line: 4 });
       pinDocument("abc123");
+      setOtherFoldersCollapsed(true);
     });
     flush(() => resetWorkspaceState());
     expect(lastDocumentId()).toBeNull();
@@ -145,5 +164,7 @@ describe("workspace state", () => {
     expect(pinnedDocumentIds()).toEqual([]);
     expect(window.localStorage.getItem("emdy:workspace:pinned")).toBeNull();
     expect(window.localStorage.getItem("emdy:workspace:last-document")).toBeNull();
+    expect(otherFoldersCollapsed()).toBe(false);
+    expect(window.localStorage.getItem("emdy:workspace:other-folders-collapsed")).toBeNull();
   });
 });

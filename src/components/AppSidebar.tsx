@@ -22,7 +22,14 @@ import { editorApi } from "~/state/editor-api";
 import { libraryStatus } from "~/state/library";
 import { closeSettings, openSettings, view } from "~/state/navigation";
 import { isOpenedFile, openedFileIds } from "~/state/opened-files";
-import { isPinned, pinDocument, pinnedDocumentIds, unpinDocument } from "~/state/workspace";
+import {
+  isPinned,
+  otherFoldersCollapsed,
+  pinDocument,
+  pinnedDocumentIds,
+  setOtherFoldersCollapsed,
+  unpinDocument,
+} from "~/state/workspace";
 import {
   requestEditorFocus,
   searchRequested,
@@ -236,6 +243,12 @@ export default function AppSidebar() {
         a.length === b.length && a.every((doc, index) => sameListing(doc, b[index])),
     },
   );
+  const shelfItems = createMemo(() => {
+    const items = opened();
+    if (!otherFoldersCollapsed()) return items;
+    const id = activeDocumentId();
+    return items.filter((doc) => doc.id === id);
+  });
   const sections = createMemo(
     () => {
       const pins = new Set(pinnedDocumentIds());
@@ -336,7 +349,8 @@ export default function AppSidebar() {
     const siblings = Array.from(list?.children ?? []).filter(
       (item) => item !== row && !item.hasAttribute("data-removing"),
     );
-    return siblings.length === 0 && section instanceof HTMLLIElement ? section : row;
+    const removable = section instanceof HTMLLIElement || section?.hasAttribute("data-shelf");
+    return siblings.length === 0 && section && removable ? section : row;
   };
 
   const confirmDelete = (id: string, row: HTMLElement | undefined) => {
@@ -547,8 +561,8 @@ export default function AppSidebar() {
           </Show>
         </div>
       </div>
-      <SidebarContent onContextMenu={libraryMenu}>
-        <nav ref={(el) => (nav = el)} aria-label="Main" class="flex flex-col">
+      <nav ref={(el) => (nav = el)} aria-label="Main" class="flex min-h-0 flex-1 flex-col">
+        <SidebarContent onContextMenu={libraryMenu}>
           <Show when={searching()}>
             <SidebarGroup class="px-2 py-0">
               <Show
@@ -602,16 +616,6 @@ export default function AppSidebar() {
                     </SidebarMenu>
                   </li>
                 </Show>
-                <Show when={opened().length > 0}>
-                  <li>
-                    <SidebarGroupLabel id="documents-opened">Other folders</SidebarGroupLabel>
-                    <SidebarMenu aria-labelledby="documents-opened" class="gap-px">
-                      <For each={opened()} keyed={(doc) => doc.id}>
-                        {(doc) => renderItem(doc)}
-                      </For>
-                    </SidebarMenu>
-                  </li>
-                </Show>
                 <For each={sections()} keyed={(section) => section.group}>
                   {(section) => (
                     <li>
@@ -629,8 +633,52 @@ export default function AppSidebar() {
               </SidebarMenu>
             </SidebarGroup>
           </Show>
-        </nav>
-      </SidebarContent>
+        </SidebarContent>
+        <Show when={!searching() && opened().length > 0}>
+          <section
+            data-shelf=""
+            aria-labelledby="documents-opened"
+            class="flex max-h-[40%] min-h-0 shrink-0 flex-col px-2 pt-1"
+          >
+            <SidebarGroupLabel>
+              <button
+                id="documents-opened"
+                type="button"
+                class="-mx-1 flex h-6 items-center gap-1 rounded-md px-1 outline-none hover:bg-hover hover:text-text-muted focus-visible:ring-2 focus-visible:ring-accent"
+                aria-expanded={otherFoldersCollapsed() ? "false" : "true"}
+                aria-controls="documents-opened-list"
+                onClick={() => setOtherFoldersCollapsed(!otherFoldersCollapsed())}
+              >
+                Other folders
+                <Show when={otherFoldersCollapsed()}>
+                  <span aria-hidden="true" class="tabular-nums">
+                    ({opened().length})
+                  </span>
+                </Show>
+                <Icon
+                  name="chevron-down"
+                  size={11}
+                  class={cn(
+                    "transition-transform duration-150 motion-reduce:transition-none",
+                    otherFoldersCollapsed() && "-rotate-90",
+                  )}
+                />
+              </button>
+            </SidebarGroupLabel>
+            <Show when={shelfItems().length > 0}>
+              <SidebarMenu
+                id="documents-opened-list"
+                aria-labelledby="documents-opened"
+                class="scrollbar-quiet min-h-0 gap-px overflow-y-auto overflow-x-hidden"
+              >
+                <For each={shelfItems()} keyed={(doc) => doc.id}>
+                  {(doc) => renderItem(doc)}
+                </For>
+              </SidebarMenu>
+            </Show>
+          </section>
+        </Show>
+      </nav>
       <SidebarFooter class="px-3 py-2">
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-0.5">
