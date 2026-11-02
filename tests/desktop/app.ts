@@ -34,8 +34,9 @@ export async function createSandbox(): Promise<DesktopSandbox> {
 }
 
 function sandboxEnv(sandbox: DesktopSandbox): Record<string, string> {
+  const { ELECTRON_RUN_AS_NODE: _runAsNode, ...inherited } = process.env as Record<string, string>;
   return {
-    ...(process.env as Record<string, string>),
+    ...inherited,
     EMDY_USER_DATA_DIR: sandbox.userData,
     EMDY_LIBRARY_FOLDER: sandbox.folder,
   };
