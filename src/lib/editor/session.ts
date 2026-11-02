@@ -56,7 +56,11 @@ export function createEditorSession(options: EditorSessionOptions): EditorSessio
       }
       current = id;
       revision = nextRevision;
-      if (restored && restored.revision === nextRevision) {
+      if (
+        restored &&
+        restored.revision === nextRevision &&
+        restored.state.doc.eq(restored.state.toText(text))
+      ) {
         view.setState(restored.state);
         view.dispatch({ effects: restored.scroll });
         return true;

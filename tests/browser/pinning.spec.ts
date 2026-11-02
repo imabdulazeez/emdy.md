@@ -27,6 +27,10 @@ test("a pinned document sits above the date groups and stays pinned after a relo
   await page.keyboard.press("Shift+F10");
   const menu = page.getByRole("menu", { name: "Reading list", exact: true });
   await expect(menu).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Open in split view", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("menuitem", { name: "Pin", exact: true })).toBeFocused();

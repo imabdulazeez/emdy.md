@@ -1,0 +1,63 @@
+appId: md.emdy.desktop
+productName: emdy
+copyright: Copyright © emdy contributors
+directories:
+  app: out/desktop/app
+  output: out/desktop/release
+  buildResources: desktop/resources
+files:
+  - "**/*"
+  - "!**/node_modules/**"
+extraResources:
+  - from: out/desktop/dictionaries
+    to: dictionaries
+asar: true
+npmRebuild: false
+nodeGypRebuild: false
+publish: null
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  grantFileProtocolExtraPrivileges: false
+mac:
+  icon: out/desktop/icon.icns
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false
+  darkModeSupport: true
+  fileAssociations:
+    - ext: [md, markdown]
+      name: Markdown document
+      role: Editor
+      rank: Default
+win:
+  icon: icon.png
+  target:
+    - nsis
+  fileAssociations:
+    - ext: [md, markdown]
+      name: emdy.markdown
+      description: Markdown document
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  icon: icon.png
+  target:
+    - AppImage
+    - tar.gz
+    - deb
+  maintainer: Abdul Azeez <16335012+imabdulazeez@users.noreply.github.com>
+  category: Office
+  mimeTypes:
+    - text/markdown
+    - text/x-markdown

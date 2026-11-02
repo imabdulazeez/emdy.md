@@ -31,7 +31,7 @@ test("a new document takes its title from the first line, keeps it across reload
     sidebar.getByRole("button", { name: "Zanzibar itinerary", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await expect(page).toHaveURL(/\/#\/d\/zanzibar-itinerary-[a-z0-9]{6}(?:\/[a-z0-9-]+)?$/);
-  await expect(page).toHaveTitle("Zanzibar itinerary · emdy.md");
+  await expect(page).toHaveTitle("Zanzibar itinerary · emdy");
   const id = documentIdFrom(page.url());
 
   await page.keyboard.press("Enter");
@@ -47,7 +47,7 @@ test("a new document takes its title from the first line, keeps it across reload
   await page.reload();
   await expect(page).toHaveURL(new RegExp(`/#/d/zanzibar-itinerary-${id}(?:/[a-z0-9-]+)?$`));
   await expect(titleButton(page, "Zanzibar itinerary")).toBeVisible();
-  await expect(page).toHaveTitle("Zanzibar itinerary · emdy.md");
+  await expect(page).toHaveTitle("Zanzibar itinerary · emdy");
   await expect(
     sidebar.getByRole("button", { name: "Zanzibar itinerary", exact: true }),
   ).toHaveAttribute("aria-current", "page");
@@ -57,7 +57,7 @@ test("a new document takes its title from the first line, keeps it across reload
   await page.keyboard.press("End");
   await page.keyboard.type(" and Pemba");
   await expect(titleButton(page, "Zanzibar itinerary and Pemba")).toBeVisible();
-  await expect(page).toHaveTitle("Zanzibar itinerary and Pemba · emdy.md");
+  await expect(page).toHaveTitle("Zanzibar itinerary and Pemba · emdy");
   await expect(page).toHaveURL(
     new RegExp(`/#/d/zanzibar-itinerary-and-pemba-${id}(?:/[a-z0-9-]+)?$`),
   );
@@ -75,9 +75,9 @@ test("a new document takes its title from the first line, keeps it across reload
     new RegExp(`/#/d/zanzibar-itinerary-and-pemba-${id}(?:/[a-z0-9-]+)?$`),
   );
   await expect(titleButton(page, "Zanzibar itinerary and Pemba")).toBeVisible();
-  await expect(page).toHaveTitle("Zanzibar itinerary and Pemba · emdy.md");
+  await expect(page).toHaveTitle("Zanzibar itinerary and Pemba · emdy");
   await sidebar.getByRole("button", { name: "Welcome to emdy", exact: true }).click();
-  await expect(page).toHaveTitle("Welcome to emdy · emdy.md");
+  await expect(page).toHaveTitle("Welcome to emdy · emdy");
 
   const leaks = requests.filter((request) =>
     ["zanzibar", "pemba", "stone town", id].some((secret) =>
@@ -320,7 +320,7 @@ test("the last-edited label sits beside a full title and gives way when the tool
 });
 
 test.describe("what a crawler sees on a fresh visit", () => {
-  const HOME_TITLE = "emdy.md · Private Markdown editor that runs in your browser";
+  const HOME_TITLE = "emdy · Private Markdown editor that runs in your browser";
 
   test("the rendered welcome page keeps the descriptive title and a single top-level heading", async ({
     page,
@@ -347,7 +347,7 @@ test.describe("what a crawler sees on a fresh visit", () => {
       await expect(
         page.getByRole("heading", {
           level: 1,
-          name: "emdy.md: a private Markdown editor that runs in your browser",
+          name: "emdy: a private Markdown editor that runs in your browser",
           exact: true,
         }),
       ).toBeVisible();

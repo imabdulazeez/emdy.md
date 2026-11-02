@@ -10,6 +10,7 @@ import {
   documents,
   findDocument,
   openDocument,
+  openInSplit,
   resetDocumentState,
   setTitle,
   updateDocumentText,
@@ -33,7 +34,7 @@ import {
 } from "./navigation";
 import { resetStatsState, setOutline } from "./stats";
 import { anchorViewportLine, resetViewportState, setViewportLine } from "./viewport";
-import { resetWorkspaceState, savePosition } from "./workspace";
+import { resetWorkspaceState, savePosition, splitLayout } from "./workspace";
 
 let stop: (() => void) | undefined;
 
@@ -150,6 +151,32 @@ describe("navigation", () => {
     flush(() => openDocument(first.id));
     expect(location()).toBe(documentHref(first));
     expect(window.history.length).toBe(length + 2);
+  });
+
+  it("names the focused pane in the URL and moves between panes without new entries", () => {
+    start();
+    const [first, second, third] = documents();
+    const length = window.history.length;
+    flush(() => openInSplit(second.id));
+    expect(location()).toBe(documentHref(second));
+    expect(window.history.length).toBe(length);
+    flush(() => openDocument(first.id));
+    expect(location()).toBe(documentHref(first));
+    expect(window.history.length).toBe(length);
+    flush(() => openDocument(third.id));
+    expect(location()).toBe(documentHref(third));
+    expect(window.history.length).toBe(length + 1);
+  });
+
+  it("focuses the other pane when the URL names its document", () => {
+    start();
+    const [first, second] = documents();
+    flush(() => openInSplit(second.id));
+    window.history.replaceState(null, "", documentHref(first));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    flush();
+    expect(activeDocumentId()).toBe(first.id);
+    expect(splitLayout()).toEqual({ other: second.id, side: "left" });
   });
 
   it("follows creation and deletion", () => {

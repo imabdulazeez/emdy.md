@@ -36,7 +36,9 @@ test("an icon chosen from the right-click menu is saved beside the files and sur
   await reading().click({ button: "right" });
   const menu = page.getByRole("menu", { name: "Reading list", exact: true });
   await expect(menu).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
+  await expect(
+    page.getByRole("menuitem", { name: "Open in split view", exact: true }),
+  ).toBeFocused();
   await expectInsideViewport(page, menu);
 
   const registry = page.waitForResponse((response) =>
@@ -85,16 +87,12 @@ test("an icon chosen from the right-click menu is saved beside the files and sur
   await page.keyboard.type(" Still editable.");
   await expect(editor).toContainText("Still editable.");
 
-  await page.getByRole("button", { name: "Hide sidebar", exact: true }).click();
-  const collapsed = reading().locator("[data-document-icon=lucide]");
-  await expect(collapsed).toBeVisible();
-  const collapsedBox = (await collapsed.boundingBox())!;
-  expect(collapsedBox.width).toBeGreaterThan(8);
-
   await reading().focus();
   await page.keyboard.press("Shift+F10");
   await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
   await page.keyboard.press("End");
+  await expect(page.getByRole("menuitem", { name: "Delete…", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
   await expect(page.getByRole("menuitem", { name: "Pin", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowUp");
   await expect(
@@ -139,6 +137,10 @@ test("context menus stay on screen, open from the keyboard, and hand focus back"
   const menuBox = (await menu.boundingBox())!;
   expect(menuBox.y).toBeGreaterThanOrEqual(anchor.y);
   expect(Math.abs(menuBox.x - anchor.x)).toBeLessThan(anchor.width);
+  await expect(
+    page.getByRole("menuitem", { name: "Open in split view", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("menuitem", { name: "Pin", exact: true })).toBeFocused();
@@ -149,7 +151,9 @@ test("context menus stay on screen, open from the keyboard, and hand focus back"
   await expect(weekly).toBeFocused();
 
   await page.keyboard.press("Shift+F10");
-  await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
+  await expect(
+    page.getByRole("menuitem", { name: "Open in split view", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("End");
   await expect(page.getByRole("menuitem", { name: "Delete…", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");

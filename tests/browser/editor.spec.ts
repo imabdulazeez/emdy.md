@@ -1,5 +1,11 @@
 import { test, expect, seedLibrary } from "./fixtures";
 
+declare global {
+  interface Window {
+    __emdyOpened?: string[];
+  }
+}
+
 test("reload keeps a new document and route, and an unknown route falls back to the last document", async ({
   page,
 }) => {
@@ -199,6 +205,94 @@ test("outline navigation scrolls real editor geometry and tracks the visible hea
   );
 });
 
+test("a long outline scrolls through its divider rail instead of a scrollbar", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await seedLibrary(page);
+  await page.getByRole("button", { name: "New document", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await editor.fill(
+    Array.from({ length: 60 }, (_, index) => `## Finding ${index + 1}\n\nDetail.\n`).join("\n"),
+  );
+  await editor.press("ControlOrMeta+Home");
+  const outline = page.getByRole("navigation", { name: "Outline", exact: true });
+  await expect(outline.getByRole("button", { name: "Finding 60", exact: true })).toBeAttached();
+  const contents = page.getByRole("complementary", { name: "Contents", exact: true });
+  expect((await contents.boundingBox())?.width).toBeCloseTo(288, 0);
+  const metrics = () =>
+    outline.evaluate((element) => ({
+      gutter: (element as HTMLElement).offsetWidth - element.clientWidth,
+      overflow: element.scrollHeight - element.clientHeight,
+      scrollTop: element.scrollTop,
+    }));
+  await expect.poll(async () => (await metrics()).scrollTop).toBe(0);
+  const initial = await metrics();
+  expect(initial.gutter).toBe(0);
+  expect(initial.overflow).toBeGreaterThan(0);
+
+  const rail = contents.getByTestId("scroll-rail");
+  const thumb = contents.getByTestId("scroll-rail-thumb");
+  await expect(rail).toHaveAttribute("data-scrollable", "true");
+  const railBox = (await rail.boundingBox())!;
+  const contentsBox = (await contents.boundingBox())!;
+  expect(railBox.x + railBox.width).toBeCloseTo(contentsBox.x + contentsBox.width, 0);
+  expect(railBox.height).toBeGreaterThan(300);
+  const startThumb = (await thumb.boundingBox())!;
+  expect(startThumb.y).toBeCloseTo(railBox.y, 0);
+  expect(startThumb.height).toBeLessThan(railBox.height);
+
+  await outline.hover();
+  await page.mouse.wheel(0, 400);
+  await expect.poll(async () => (await metrics()).scrollTop).toBeGreaterThan(0);
+  await expect.poll(async () => (await thumb.boundingBox())!.y).toBeGreaterThan(startThumb.y);
+
+  const thumbBox = (await thumb.boundingBox())!;
+  await page.mouse.move(thumbBox.x + thumbBox.width / 2, thumbBox.y + thumbBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(thumbBox.x + thumbBox.width / 2, railBox.y + railBox.height + 200, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  await expect.poll(async () => (await metrics()).scrollTop).toBeCloseTo(initial.overflow, 0);
+  await expect(outline.getByRole("button", { name: "Finding 60", exact: true })).toBeInViewport();
+  const endThumb = (await thumb.boundingBox())!;
+  expect(endThumb.y + endThumb.height).toBeCloseTo(railBox.y + railBox.height, 0);
+
+  await page.mouse.click(railBox.x + railBox.width / 2, railBox.y + 2);
+  await expect.poll(async () => (await metrics()).scrollTop).toBe(0);
+  await expect(outline.getByRole("button", { name: "Finding 1", exact: true })).toBeInViewport();
+});
+
+test("outline entries hang their numbers, wrap long headings, and never overlap", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await seedLibrary(page);
+  await page.getByRole("button", { name: "New document", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await editor.fill(
+    Array.from(
+      { length: 12 },
+      (_, index) =>
+        `## ${index + 1}. Disposals: some lines repeat a description that runs well past one line\n\nDetail.\n`,
+    ).join("\n"),
+  );
+  await editor.press("ControlOrMeta+Home");
+  const outline = page.getByRole("navigation", { name: "Outline", exact: true });
+  const name = (n: number) =>
+    `${n}. Disposals: some lines repeat a description that runs well past one line`;
+  const nine = outline.getByRole("button", { name: name(9), exact: true });
+  const ten = outline.getByRole("button", { name: name(10), exact: true });
+  await expect(ten).toBeVisible();
+  const nineLabel = (await nine.locator(".outline-entry-text").boundingBox())!;
+  const tenLabel = (await ten.locator(".outline-entry-text").boundingBox())!;
+  expect(nineLabel.x).toBeCloseTo(tenLabel.x, 0);
+  expect(nineLabel.height).toBeGreaterThan(25);
+  expect(nineLabel.height).toBeLessThan(45);
+  const nineBox = (await nine.boundingBox())!;
+  const tenBox = (await ten.boundingBox())!;
+  expect(tenBox.y).toBeGreaterThanOrEqual(nineBox.y + nineBox.height);
+});
+
 test("bundled images, fenced code, and editing work without unexpected network requests", async ({
   page,
   context,
@@ -278,4 +372,46 @@ test("typing a numbered list marker in editable preview keeps the caret after it
   await page.keyboard.press("Enter");
   await page.keyboard.type("second");
   await expect(editor.locator(".cm-line").nth(1)).toHaveText("2. second");
+});
+
+test("a pasted URL opens from the reader on a click and from the editable preview on a Mod-click", async ({
+  page,
+  requests,
+}) => {
+  await page.addInitScript(() => {
+    window.open = (url) => {
+      (window.__emdyOpened ??= []).push(String(url));
+      return null;
+    };
+  });
+  await seedLibrary(page);
+  await page.getByRole("button", { name: "New document", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await editor.click();
+  await page.keyboard.insertText("Intro\n\nRead https://example.com/docs today\n\nAfter");
+  const opened = () => page.evaluate(() => window.__emdyOpened ?? []);
+
+  await page.keyboard.press("ControlOrMeta+3");
+  const preview = page.getByRole("document", { name: "Preview", exact: true });
+  const readerLink = preview.getByRole("link", { name: "https://example.com/docs", exact: true });
+  await readerLink.click();
+  await expect.poll(opened).toEqual(["https://example.com/docs"]);
+  await readerLink.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(opened).toHaveLength(2);
+
+  await page.keyboard.press("ControlOrMeta+2");
+  const url = editor.locator(".cm-live-link", { hasText: "https://example.com/docs" });
+  await url.click();
+  await page.keyboard.insertText("x");
+  await expect(editor).not.toContainText("Read https://example.com/docs today");
+  expect(await opened()).toHaveLength(2);
+  await page.keyboard.press("Backspace");
+  await expect(editor).toContainText("Read https://example.com/docs today");
+
+  await url.click({ modifiers: ["ControlOrMeta"] });
+  await expect.poll(opened).toHaveLength(3);
+  expect((await opened())[2]).toBe("https://example.com/docs");
+  await expect(editor).toContainText("Read https://example.com/docs today");
+  expect(requests.filter((request) => request.url.includes("example.com"))).toEqual([]);
 });

@@ -7,6 +7,7 @@ export interface PersistedOptions<T> {
   fallback: T;
   parse: (value: unknown) => value is T;
   writeDelayMs?: number;
+  perTab?: boolean;
 }
 
 export interface Persisted<T> {
@@ -66,6 +67,7 @@ export function createPersistedSignal<T>(options: PersistedOptions<T>): Persiste
 
   entries.set(key, {
     receive(raw) {
+      if (options.perTab) return;
       scheduled?.cancel();
       current = decodeStored(raw, parse, fallback);
       const received = current;

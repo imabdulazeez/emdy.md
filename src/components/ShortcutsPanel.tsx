@@ -1,6 +1,12 @@
 import { createEffect, For, onCleanup, Show } from "solid-js";
 import { trapTabKey } from "~/lib/focus-trap";
-import { formatShortcut, isMacPlatform, SHORTCUT_GROUPS, SHORTCUTS } from "~/lib/shortcuts";
+import {
+  formatShortcut,
+  isMacPlatform,
+  keysFor,
+  SHORTCUT_GROUPS,
+  SHORTCUTS,
+} from "~/lib/shortcuts";
 import { setShortcutsOpen, shortcutsOpen } from "~/state/ui";
 import { Icon } from "./icons";
 
@@ -84,7 +90,7 @@ export default function ShortcutsPanel() {
                         <div class="flex items-center justify-between gap-3">
                           <dt class="text-text-muted">{shortcut.label}</dt>
                           <dd>
-                            <kbd>{formatShortcut(shortcut.keys, mac())}</kbd>
+                            <kbd>{formatShortcut(keysFor(shortcut), mac())}</kbd>
                           </dd>
                         </div>
                       )}

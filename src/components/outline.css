@@ -2,8 +2,9 @@
    by indentation alone; the active heading carries a small ink marker. The rail
    appears only when the pane is wide enough to give up the space. */
 .outline-gutter {
-  --outline-width: 13.5rem;
+  --outline-width: 18rem;
 
+  position: relative;
   display: none;
   flex-shrink: 0;
   flex-direction: column;
@@ -16,29 +17,56 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: calc(var(--doc-top) + 0.1rem) 0.5rem 4rem 1rem;
+  scrollbar-width: none;
+  padding: calc(var(--doc-top) + 0.1rem) 1rem 4rem 1rem;
+}
+
+.outline-gutter-list::-webkit-scrollbar {
+  display: none;
+}
+
+.outline-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.outline-entries > li[data-section-start] {
+  margin-top: 0.6rem;
 }
 
 .outline-entry {
   position: relative;
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
   width: 100%;
-  padding: 0.2rem 0.5rem 0.2rem calc(0.75rem + var(--outline-depth, 0) * 0.7rem);
+  padding: 0.25rem 0.5rem 0.25rem calc(0.75rem + var(--outline-depth, 0) * 0.7rem);
   border-radius: 6px;
   color: var(--color-text-muted);
   font-size: 12.5px;
-  line-height: 1.35;
+  line-height: 1.4;
   text-align: left;
   transition:
     color 120ms var(--ease-out-quick),
     background-color 120ms var(--ease-out-quick);
 }
 
+.outline-entry-number {
+  flex-shrink: 0;
+  min-width: var(--outline-number-width, 0);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .outline-entry-text {
-  display: block;
+  display: -webkit-box;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .outline-entry:hover {
@@ -46,14 +74,15 @@
   background: color-mix(in srgb, var(--color-text) 5%, transparent);
 }
 
-.outline-entry[aria-current="location"] {
+.outline-entry[aria-current="location"],
+.outline-entry[aria-current="location"] .outline-entry-number {
   color: var(--color-text);
 }
 
 .outline-entry[aria-current="location"]::before {
   content: "";
   position: absolute;
-  top: 50%;
+  top: calc(0.25rem + 0.7em);
   left: 0;
   width: 3px;
   height: 0.9em;
@@ -65,5 +94,12 @@
 @container (min-width: 1100px) {
   .outline-gutter {
     display: flex;
+  }
+}
+
+/* Two documents side by side need the width more than the outline does. */
+@container (max-width: 1499px) {
+  [data-split] > .outline-gutter {
+    display: none;
   }
 }

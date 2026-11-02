@@ -1,8 +1,8 @@
 <div align="center">
 
-<a href="https://emdy.md"><img src="public/logo.svg" alt="emdy.md logo" width="96" height="96"></a>
+<a href="https://emdy.md"><img src="public/logo.svg" alt="emdy logo" width="96" height="96"></a>
 
-# emdy.md
+# emdy
 
 **A beautiful, local-first Markdown editor that runs entirely in your browser.**
 
@@ -120,6 +120,8 @@ The live site runs on Cloudflare Workers, which serve only the files in `dist`. 
 1. Add your domain as a zone in Cloudflare and update the routes in `wrangler.jsonc` to match.
 2. Sign in with `vp exec wrangler login`.
 3. Run `vp run deploy`.
+
+On Ubuntu 23.10 and later, install the `.deb`. Those releases restrict the user namespaces Chromium's sandbox needs, and the `.deb` installs an AppArmor profile that allows them. The AppImage and tar.gz can't, so they may abort at launch with a `chrome-sandbox` error.
 
 ## 🤝 Contributing
 

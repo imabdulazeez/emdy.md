@@ -2,8 +2,12 @@ import "~/components/preview.css";
 
 export const PRINT_FRAME_TITLE = "Print preview";
 
+export const PRINT_FONT_UI =
+  '"Helvetica Neue", Helvetica, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif';
+
 export const PRINT_STYLES = `
 @page { margin: 20mm; }
+:root { --font-ui: ${PRINT_FONT_UI}; }
 html, body {
   height: auto;
   overflow: visible;

@@ -1,4 +1,5 @@
 import { test, expect, seedLibrary } from "./fixtures";
+import { readFile } from "./opfs";
 
 test("global shortcuts act from inside the editor without typing into the document", async ({
   page,
@@ -11,11 +12,10 @@ test("global shortcuts act from inside the editor without typing into the docume
   await editor.press("ControlOrMeta+Home");
   const original = await editor.innerText();
 
-  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  const sidebarWidth = (await sidebar.boundingBox())!.width;
   await page.keyboard.press("ControlOrMeta+Backslash");
-  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
-  await page.keyboard.press("ControlOrMeta+Backslash");
-  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await expect(sidebar).toBeVisible();
+  expect((await sidebar.boundingBox())!.width).toBe(sidebarWidth);
 
   await editor.focus();
   await page.keyboard.press("ControlOrMeta+Shift+F");
@@ -62,4 +62,28 @@ test("global shortcuts act from inside the editor without typing into the docume
   await page.keyboard.type("Fresh page");
   await expect(editor).toContainText("Fresh page");
   await expect(editor).not.toContainText("# Welcome to emdy");
+});
+
+test("Mod-S writes pending edits straight away instead of opening the browser's save dialog", async ({
+  page,
+}) => {
+  await seedLibrary(page);
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await expect(editor).toContainText("# Welcome to emdy");
+  const before = await readFile(page, "Welcome to emdy.md");
+  const now = Date.now();
+  await page.clock.install({ time: now });
+  await page.clock.pauseAt(now + 1000);
+  await editor.press("ControlOrMeta+End");
+  await page.keyboard.type(" Saved by shortcut.");
+  expect(await readFile(page, "Welcome to emdy.md")).toBe(before);
+
+  const downloads: string[] = [];
+  page.on("download", (download) => downloads.push(download.suggestedFilename()));
+  await page.keyboard.press("ControlOrMeta+KeyS");
+  await expect.poll(() => readFile(page, "Welcome to emdy.md")).toContain("Saved by shortcut.");
+  await expect(editor).toBeFocused();
+  await expect(editor).toContainText("Saved by shortcut.");
+  await expect(editor).not.toContainText("Saved by shortcut.s");
+  expect(downloads).toEqual([]);
 });

@@ -1,15 +1,16 @@
 ## About This Project
 
-emdy.md is a local-first, beautiful, 100% local, and lightning-fast Markdown editor. Its design is inspired by local-first apps like jspaint: useful and instantly responsive. It is built with plain Solid 2 on the Vite+ toolchain.
+emdy is a beautiful, 100% local, and lightning-fast Markdown editor. Its design is inspired by local-first apps like jspaint: useful and instantly responsive. It is built with plain Solid 2 on the Vite+ toolchain, and ships both as a web app and as an Electron desktop app built from the same renderer (see "Desktop app").
 
 ## Core Principles
 
 ### 1. Everything runs locally
 
-- All processing happens on the user's device. Parsing, rendering, file handling, search, and any other logic must run entirely in the browser.
+- All processing happens on the user's device. Parsing, rendering, file handling, search, and any other logic run in the renderer (in the browser or the desktop app's window) or, on the desktop, in the Electron main process. Nothing runs on a remote machine.
 - No data may be sent to any server. This includes documents, file names, settings, usage data, crash reports, and telemetry of any kind.
+- The one outbound request the app makes on its own is loading an image a document embeds by remote URL, because rendering the user's own Markdown faithfully requires it. It is sent with no `Referer` and carries nothing from the app. External links open only when the user follows one, in a new tab or the system browser. Do not widen either exception to any other request.
 - Do not add analytics SDKs, error-reporting services, remote fonts, CDNs, or any third-party network calls. Bundle every asset with the app.
-- Persist user data only in local browser storage (IndexedDB, localStorage, the File System Access API, etc.).
+- Persist user data only on the device: local browser storage (localStorage, the Origin Private File System) through `src/lib/storage/`, and in the desktop app the user's documents folder and the main process's files in `<userData>`.
 - If a feature seems to require a server, stop and find a local alternative. If none exists, do not build it.
 
 ### 2. Fast and beautiful
@@ -79,6 +80,14 @@ Rules:
 
 Typing `@` at the start of a word opens a menu of dates, other documents, headings (`@#`), and values of the open document; `/` at the start of a line opens the block menu. Both live in `src/lib/editor/composer.ts` and insert plain Markdown only, never a live token, because documents are `.md` files. They stay shut in code, links, URLs, and HTML. The document title field offers the same dates through its own small listbox in `DocumentTitle.tsx`; both surfaces share the trigger rule in `src/lib/mention-query.ts`. Dates come from the device's local calendar through `src/lib/dates.ts`; never derive a date from `toISOString()`, which is UTC.
 
+## Split view
+
+Two documents can sit side by side. Cmd-click (Ctrl-click elsewhere) or "Open in split view" in a sidebar row's context menu opens a document beside the active one; `switch-pane` and `close-split` move between and leave the panes. The active document is always the focused pane, so the toolbar, outline, status, and URL follow focus, and the other pane is `{ other, side }` in workspace state (`splitLayout`). Opening a document that the other pane shows moves focus there, so one document never appears twice.
+
+- `src/state/split.ts` lays out the panes. Each pane keeps a stable slot while it shows the same document, so the surviving editor and its undo history outlive a split closing. `EditorPanes` renders one `<Show>` per slot rather than a `<For>`: a `<For>` disposes items inside its computation, where the closing editor's cleanup writes would halt Solid.
+- `Editor` takes `documentId` and `active`. Only the active pane publishes the cursor, formats, outline, viewport, and `editorApi`. Every mounted pane registers through `registerLiveEditor`, so `flushEditors` and link rewrites reach the unfocused pane too. Code that needs "the editor for document X" uses `liveEditor(id)`, not `editorApi()`.
+- Focus moving between panes replaces the history entry instead of pushing one. Narrow screens show only the focused pane.
+
 ## Keyboard shortcuts
 
 Keyboard use is first class: every action is reachable from the keyboard, and every shortcut is declared once. `SHORTCUTS` in `src/lib/shortcuts.ts` is the registry. Each entry has an `id`, `keys` in CodeMirror notation (`Mod-Shift-f`; `Mod` is Cmd on macOS and Ctrl elsewhere), a `label`, and a panel `group`.
@@ -87,6 +96,10 @@ Keyboard use is first class: every action is reachable from the keyboard, and ev
 - The shortcuts panel renders the registry, so a new entry needs no panel changes. A control with a shortcut sets `title` with `shortcutTitle(label, keys, mac)` and `aria-keyshortcuts` with `ariaKeyShortcuts(keys, mac)`; a menu item passes `keys` to `ToolbarMenu`. Display keys only through `formatShortcut`, never hand-written glyphs like "⌘B" or "(Esc)".
 - Every new action should consider a shortcut. Choose one that is free in the registry and in the editor keymap; leave the action without one rather than take a poor key.
 - Never claim browser- or OS-reserved combinations (Mod-n, Mod-t, Mod-w, Mod-q, Mod-Tab, F5, F12) or keys that text editing needs (arrows, Home, End, Backspace, Mod-a, Mod-c, Mod-v, Mod-x). Tab and Enter may only extend their editing meaning, as the list bindings do. A global shortcut runs before the editor sees the key, so it must not shadow an editor binding.
+- **Desktop keys.** The desktop app has no browser to reserve keys, so an entry may add `desktopKeys` with the conventional native key when its web key is only a stand-in for a browser-reserved one (New document is `Mod-Alt-n` on the web and `Mod-n` on the desktop).
+  - `shortcutKeys` and `keysFor` pick the right one through `isDesktop()`, so tooltips, `aria-keyshortcuts`, the panel, the global handler, and the desktop menu follow it.
+  - `desktopKeys` may only name a browser-reserved combination. It must not shadow an editor binding or a `desktop/menu.ts` accelerator that belongs to a different action; Mod-w and Mod-q stay with the menu's Close and Quit.
+  - A new or changed `desktopKeys` needs an Electron spec that presses it.
 - Keep keyboard parity with the mouse. Context menus open from `isContextMenuKey` as well as `contextmenu`, menus move with the arrow keys, and dialogs and popovers close on Escape and hand focus back to their trigger.
 - Widget-local keys (Enter and Escape in an input, arrows in a menu, Tab between table cells) follow platform conventions and are not registered.
 - The `/` menu lists the `Blocks` group of `SHORTCUTS` and runs `BLOCK_COMMANDS` from `src/lib/editor/extensions.ts`, which the keymap also reads. A new block action gets a registry entry and a `BLOCK_COMMANDS` entry and appears in both.
@@ -102,10 +115,10 @@ Every user-facing setting and every piece of restorable workspace state is persi
 
 Two registries sit on top of the adapter and have different lifecycles:
 
-| Registry    | Module                     | Holds                                                                                  | Settings page |
-| ----------- | -------------------------- | -------------------------------------------------------------------------------------- | ------------- |
-| Preferences | `src/state/preferences.ts` | Choices the user makes deliberately: theme, view, future options                       | Yes           |
-| Workspace   | `src/state/workspace.ts`   | Where the user was: last document, sidebar state, per-document cursor and reading line | No            |
+| Registry    | Module                     | Holds                                                                                     | Settings page |
+| ----------- | -------------------------- | ----------------------------------------------------------------------------------------- | ------------- |
+| Preferences | `src/state/preferences.ts` | Choices the user makes deliberately: theme, view, future options                          | Yes           |
+| Workspace   | `src/state/workspace.ts`   | Where the user was: last document, pinned documents, per-document cursor and reading line | No            |
 
 Rules:
 
@@ -120,8 +133,8 @@ Rules:
 
 Documents are plain `<title>.md` files in a directory, never blobs in a database. The code that owns this lives in `src/lib/storage/` and is driven by `src/state/library.ts`.
 
-- `directory.ts` is the only file-system abstraction. `createHandleDirectory` wraps a `FileSystemDirectoryHandle`, `createOriginPrivateDirectory` opens the Origin Private File System root and asks for persistence, and `createMemoryDirectory` is the test double. Nothing else touches handles.
-- The Origin Private File System is the only storage. There is no folder picker, no storage selector, and no memory fallback in the running app: `state/library.ts` opens the OPFS root at startup, and a browser that has none is an error, not a silent downgrade. `useLibraryDirectory` swaps in a memory directory for tests and is the only reason another `Directory` implementation exists.
+- `directory.ts` defines the `Directory` interface and is the only place that touches handles. `createHandleDirectory` wraps a `FileSystemDirectoryHandle`, `createOriginPrivateDirectory` opens the Origin Private File System root and asks for persistence, and `createMemoryDirectory` is the test double. `desktop-directory.ts` implements the same interface over the desktop bridge.
+- In the browser, the Origin Private File System is the only storage. There is no folder picker, no storage selector, and no memory fallback: `defaultDirectorySource` in `state/library.ts` opens the OPFS root at startup, and a browser that has none is an error, not a silent downgrade. In the desktop app the same function opens the user's documents folder through the bridge instead (see "Desktop app"). `useLibraryDirectory` swaps in a memory directory for tests.
 - `filenames.ts` maps titles to safe filenames and back (forbidden characters, reserved names, NFC, byte cap, ` 2` suffixes). Renaming a document renames its file.
 - `catalog.ts` keeps `.emdy/index.json` beside the files. It is a rebuildable cache, not a source of truth: it keeps document ids stable across renames and moves, and carries each document's chosen icon (`icon`, omitted when automatic). Losing the catalog only resets icons to automatic. An invalid stored icon is dropped rather than invalidating the catalog, and an icon-only change is written straight away without changing `modified`. `reconcile` matches files by name, then by content hash for rename detection, mints ids for new files, and drops entries whose files are gone. A folder without a catalog opens as-is; an empty folder opens as an empty library, and the workspace shows the welcome sheet until the first document is created or imported.
 - `library.ts` batches writes with a 500 ms debounce, writes the catalog before the files so an interrupted commit never loses an id, and re-reads the folder on `visibilitychange` so edits from other apps appear. While the app has unsaved edits the app wins; a document changed both in the app and on disk gets a `(conflict)` copy.
@@ -130,15 +143,32 @@ Documents are plain `<title>.md` files in a directory, never blobs in a database
 - Links between documents are plain relative Markdown links to the target's file (`[Title](Title%20file.md)`, `#slug` for a heading), built by `src/lib/markdown/document-links.ts`. `state/links.ts` resolves them by catalog file, then by title, and rewrites every link to a file the library renames, updating a label that still reads as the old title. The read-only preview is the editable preview's CodeMirror view locked by `readOnlyPreview`. In both previews, `followLinks` in `src/lib/editor/follow-links.ts` follows local links through the URL fragment: relative targets in table cells live in `data-href` (never `href`), read-only inline links render without an `href`, and middle-clicks on local links are prevented, so no click, middle-click, or new tab can request a path that names a document. External links keep a real `href` and open in a new tab. The Markdown-to-HTML worker now serves export only.
 - Never let a storage failure pass as an empty library. When the OPFS root cannot be opened or read, `LibraryGate` blocks the workspace with the failure message and a retry rather than starting the user on documents that will not be saved.
 
+## Desktop app
+
+The desktop app is an Electron shell around the unchanged renderer. Its code lives in `desktop/`; the renderer only ever sees it through the bridge the preload script exposes as `window.emdyDesktop` (`src/lib/desktop/bridge.ts`). `desktopBridge()` returns `null` in the browser, so every desktop branch in `src/` must also work, and be tested, without it.
+
+- **Loading.** The renderer is served from the privileged `app://emdy/` scheme by `protocol.handle` in `desktop/main.ts`, never from `file://` or a local server. `resolveAppRequest` in `desktop/app-url.ts` maps a request to a file and refuses anything that escapes the renderer or dictionary folders, and `appResponse` reads that file directly (Electron's `fs` reads inside `app.asar`) with an explicit content type. Never hand it to `net.fetch` as a `file://` URL: the packaged app answers "Not found" that way while the unpacked app used by the Electron specs still works. Routing stays in the URL fragment, so the app only ever loads `app://emdy/`.
+- **Local-first enforcement.** `desktop/network.ts` is the desktop counterpart of the Playwright network guard: `session.webRequest` cancels every request that is not `app://emdy`, an in-memory URL, the dev server while developing, or an image the document embeds (parity with the web). The `Referer` header is stripped and the session's user agent drops the app and Electron tokens. Permissions are denied except clipboard writes and fullscreen. New windows are denied and `http(s)`/`mailto` links go to the system browser with `shell.openExternal`; nothing else is ever handed to the OS. The desktop build adds a Content-Security-Policy with the inline first-paint script's hash (`desktop/html.ts`); never add `'unsafe-eval'` or a remote origin to it.
+- **Hardening.** Keep `contextIsolation`, `sandbox`, and `nodeIntegration: false`. IPC handlers check the sender is the app document. The Electron fuses in `electron-builder.yml` disable `RunAsNode`, `NODE_OPTIONS`, and inspector flags, and enforce asar integrity; do not relax them. DevTools and the reload item exist only in development.
+- **Documents folder.** Documents are plain `.md` files in a real folder (`~/Documents/emdy` by default, `~/Documents/emdy-dev` while developing), laid out exactly like the OPFS library, including `.emdy/index.json`. The main process owns the folder path and stores it in `<userData>/desktop.json` (`desktop/config.ts`); the renderer can never name a path. `desktop/folder.ts` validates every name and path segment, creates the default folder on `open` (so a failure reaches `LibraryGate` instead of quitting), writes through a uniquely named staging file and rename that follows a symlinked document to its target and keeps its permissions, and maps Node errors to the DOMException names the storage layer expects (`NotFoundError` above all). Every folder call carries the session number returned by `open`; choosing another folder bumps it, so a library opened on the old folder can never write into the new one.
+- **Outside edits.** `desktop/watcher.ts` watches the folder, ignores staging files and the app's own recent writes (checked against the size and mtime each write left, so an outside change mid-typing still counts), and asks the renderer to re-read; window focus does the same. `startDesktopSync` in `state/desktop.ts` wires both to `syncLibrary`.
+- **Opened files.** Markdown files (`.md`, `.markdown`) from other folders arrive through the OS (`open-file` on macOS; argv and `second-instance` on Windows and Linux; registered by the per-platform `fileAssociations` and Linux `mimeTypes` in `electron-builder.yml`), File › Open…, or a drop on the window. `desktop/opened-files.ts` owns them and keeps each file's id, path, and icon in `<userData>/opened-files.json`; the renderer only ever sees the id. A drop reaches main as `File` objects that the preload resolves with `webUtils.getPathForFile`, so page code never passes a path string, and main still accepts only existing Markdown files. A file inside the documents folder opens its library document instead. Opened files are edited in place and never copied into the documents folder: `src/lib/storage/opened-files.ts` saves them with the library's debounce through the same staged write (keeping the file's mode), keeps an outside edit that collides with an unsaved one as a `(conflict)` copy beside the file, and renames the file only when the title itself is edited (`fixedTitle` stops a heading edit from renaming someone's README). The sidebar lists them under "Other folders", where Close replaces Delete and nothing on disk is removed, and every row's context menu offers Reveal in Finder or File Explorer (`revealDocument` in `state/desktop.ts`). They are left out of library exports and have no `pagehide` journal, so the close guard is their only unload protection. The web app keeps the editor's own drop behaviour.
+- **Closing.** The window's `close` is held by `desktop/close-guard.ts` until the renderer has flushed preferences and pending saves (or three seconds pass), so quitting straight after typing loses nothing. The renderer reports whether an opened file is still unsaved; if so, main asks before closing, because opened files have no journal, and closing one in the sidebar puts it back instead of dropping its edits. The `pagehide` journal remains as the second line of defence for library documents.
+- **Spellcheck.** macOS uses the system checker. On Windows and Linux Chromium would download Hunspell dictionaries from a Google CDN; instead `desktop/scripts/stage.ts` extracts dictionaries from Electron's own release archive (verified against `node_modules/electron/checksums.json`), and the main process copies them into `<userData>/Dictionaries` before Chromium looks. `EMDY_DICTIONARIES` selects languages at build time (`en-US,fr-FR`, `all`, or `none`; English by default). "Add to dictionary" stays in Chromium's local custom dictionary.
+- **Menus.** `desktop/menu.ts` gives every menu item an explicit accelerator. App actions in the menu are built with `commandItem` from `MENU_COMMANDS`: the item's id is the `SHORTCUTS` id, its accelerator is `shortcutKeys(id, true)`, and `registerAccelerator: false` leaves the key to the renderer's global handler while a click sends the command over the `menuCommand` channel. Never write an accelerator by hand for an action that has a registry entry. `desktop/menu.test.ts` fails when any other item shadows a `SHORTCUTS` entry (only Undo and Redo may overlap, because they run the same command). Right-clicks in editable text get `desktop/context-menu.ts`; app chrome keeps using `ContextMenu`.
+- **Commands.** `pnpm dev:desktop` packs the main process and starts `vp dev --mode desktop`, which launches Electron on the dev server. `pnpm build:desktop` runs `vp build --mode desktop` (renderer into `out/desktop/app/renderer`), `vp pack` (main and preload from the `pack` block of `vite.config.ts`), and the staging script. `pnpm start:desktop` runs the built app. `pnpm package:desktop`, `package:mac` (DMG and zip), `package:win` (NSIS), and `package:linux` (AppImage, tar.gz, and deb) produce installers in `out/desktop/release`. `pnpm build` is still the web build.
+- **Signing and release builds.** The app is unsigned, so the mac build signs it ad hoc (`identity: "-"` in `electron-builder.yml`), with hardened runtime and notarization off because both need a Developer ID team. Flipping the fuses rewrites the Electron binaries, and without that ad hoc signature Apple silicon kills the app at launch with `CODESIGNING Invalid Page`. On macOS the staging script builds `out/desktop/icon.icns` from `desktop/resources/icon-mac.png` with `sips` and `iconutil`, which the mac build uses; electron-builder's own PNG-to-icns conversion writes 16 and 32 px images that macOS draws as noise. `.github/workflows/desktop-builds.yml` builds each platform in its own job (macOS arm64 and x64, Windows x64, Linux x64) on a `v*` tag or manual dispatch and uploads the installers as artifacts. Ubuntu 23.10 and later restrict the unprivileged user namespaces Chromium's sandbox needs: the deb installs an AppArmor profile that allows them, while the AppImage and tar.gz cannot, so they need that profile or the restriction lifted by hand. Never disable the sandbox to get around it.
+- **Tests.** Main-process modules are plain functions with colocated `desktop/**/*.test.ts` files; keep `desktop/main.ts` to wiring so it needs no test of its own. Electron specs live in `tests/desktop/` and run with `pnpm test:desktop`; like the browser suite, agents write them but do not run them. A change to the folder, watcher, close guard, or bridge needs an Electron spec that drives the real app.
+
 ## Testing Requirements
 
-Every piece of logic or functionality must have a unit test. This applies to UI components as well as plain functions.
+Every piece of logic or functionality must have a unit test. This applies to UI components as well as plain functions. The only exception is an entry point that holds nothing but wiring, such as `desktop/main.ts`; move any logic out of it into a tested module.
 
 The two suites answer different questions and neither substitutes for the other. The colocated suite runs in jsdom, where `src/test-setup.ts` stubs `getBoundingClientRect`, `getClientRects`, `elementFromPoint`, `matchMedia`, and `ResizeObserver` — each returns a zero-sized or inert result. Logic, formatting, and state transitions belong there. Anything whose correctness depends on real geometry, scrolling, focus order, navigation, or network behaviour belongs in the browser suite, because jsdom will pass a broken implementation of all five.
 
 ### Unit and component tests
 
-- Colocate tests with the code they cover using the `*.test.ts` or `*.test.tsx` suffix (for example `src/lib/parse.ts` and `src/lib/parse.test.ts`).
+- Colocate tests with the code they cover using the `*.test.ts` or `*.test.tsx` suffix (for example `src/lib/dates.ts` and `src/lib/dates.test.ts`).
 - Import test APIs from `vite-plus/test`, not from `vitest` directly:
 
   ```ts
@@ -188,7 +218,7 @@ Add or update a Playwright test in the same change whenever you change one of th
 
 Agents write and update browser specs but do not run them. The user runs the browser suite manually. Every rule above about when a spec is required still applies: add or update the spec in the same change, even though you will not execute it.
 
-- Do not run `pnpm test:browser` or `playwright test`.
+- Do not run `pnpm test:browser`, `pnpm test:desktop`, or `playwright test`.
 - When you finish, list the browser specs you added or changed and the behaviour each asserts, so the user knows what to run. State plainly that they have not been run.
 - If a change could plausibly break an existing spec (a renamed label, a changed title, a moved control), search `tests/browser/` for the affected locator or text and update the spec rather than leaving it for the user to discover.
 
@@ -196,10 +226,10 @@ For reference, `pnpm test:browser` builds the app and manages a temporary previe
 
 ### How often to run each suite
 
-- **While working:** `vp test watch` for the colocated tests.
+- **While working:** `vp test watch` for the colocated tests; agents run `vp test` instead, optionally filtered to the affected files.
 - **Before every commit:** the full Definition of Done below. The `vp staged` pre-commit hook only formats and lints staged files; it runs no tests, so a hook that passes says nothing about behaviour.
 - **Before every push:** the colocated suite in full against the whole working tree. The user runs the browser suite before merging.
-- **In CI:** `.github/workflows/ci.yml` runs both suites on every push to `main` and every pull request. One job runs `vp check` and `vp test`; the other installs Chromium and runs `pnpm test:browser` with `CI=true` (`forbidOnly`, two workers), uploading `test-results/` when it fails.
+- **In CI:** `.github/workflows/ci.yml` runs both suites on every push to `main` and every pull request. One job runs `vp check`, `vp test`, and `pnpm build:desktop`; the other installs Chromium and runs `pnpm test:browser` with `CI=true` (`forbidOnly`, two workers), uploading `test-results/` when it fails.
 
 Do not move the browser suite into the pre-commit hook. `vp build` builds the working tree rather than the index, so it would test unstaged changes and report on code that is not part of the commit.
 
@@ -223,7 +253,7 @@ The browser suite is not part of an agent's Definition of Done; the user runs it
 
 ## When Something Is Unclear
 
-- Consult the documentation before guessing. Context7 is available for fetching current library docs (Solid.js, SolidStart, Vitest, Vite+, Nitro, and others). Use it first.
+- Consult the documentation before guessing. Context7 is available for fetching current library docs (Solid.js, CodeMirror, Vitest, Vite+, Electron, and others). Use it first.
 - If Context7 does not resolve the question, read the library source and type definitions directly in `node_modules`. The installed code is the source of truth for the versions in use.
 - Vite+ docs are also available locally at `node_modules/vite-plus/docs`.
 - Prefer verified behavior over assumptions. When APIs have changed between versions, trust the installed version.
@@ -232,10 +262,13 @@ The browser suite is not part of an agent's Definition of Done; the user runs it
 
 - `src/app.tsx` — root application component.
 - `src/index.tsx` — browser entrypoint.
-- `src/components/` — reusable UI components, each with its own CSS file and test.
+- `src/components/` — reusable UI components, each with its own test. Styling uses the Tailwind token utilities; the few CSS files there cover CodeMirror and widget styles that utilities cannot reach.
 - `index.html` — static HTML document and Vite entrypoint.
 - `public/` — static assets bundled with the app.
 - `vite.config.ts` — Vite+ configuration (lint, fmt, test, plugins).
 - `playwright.config.ts` — browser suite configuration and temporary preview server.
 - `tests/browser/` — Playwright integration specs and shared network/error fixture.
+- `desktop/` — Electron main process, preload bridge, build plugins, and the staging script.
+- `electron-builder.yml` — desktop packaging, fuses, and installer targets.
+- `playwright.desktop.config.ts` and `tests/desktop/` — Electron specs.
 - `~/*` resolves to `src/*`.

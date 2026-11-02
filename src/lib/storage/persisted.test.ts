@@ -122,6 +122,27 @@ describe("createPersistedSignal", () => {
     expect(n.value()).toBe(0);
   });
 
+  it("keeps a per-tab value when another tab writes, while still storing its own", () => {
+    const store = subscribableStore();
+    restore = useStorage(store);
+    const n = createPersistedSignal({
+      key: "emdy:workspace:own",
+      fallback: 0,
+      parse: isNumber,
+      perTab: true,
+    });
+    const stop = startPersistenceSync({
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    } as unknown as Window);
+    flush(() => n.set(4));
+    expect(store.get("emdy:workspace:own")).toBe("4");
+    flush(() => store.emit("emdy:workspace:own", "9"));
+    expect(n.value()).toBe(4);
+    expect(n.peek()).toBe(4);
+    stop();
+  });
+
   it("flushes pending writes when the page hides", () => {
     vi.useFakeTimers();
     const store = subscribableStore();

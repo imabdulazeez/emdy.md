@@ -23,40 +23,50 @@ import {
 const originalMatchMedia = window.matchMedia;
 
 function mockViewport(mobile: boolean) {
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  let matches = mobile;
   window.matchMedia = ((query: string) =>
     ({
-      matches: mobile,
+      get matches() {
+        return matches;
+      },
       media: query,
       onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
+      addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) =>
+        listeners.add(listener),
+      removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) =>
+        listeners.delete(listener),
       addListener: () => {},
       removeListener: () => {},
       dispatchEvent: () => false,
     }) as MediaQueryList) as typeof window.matchMedia;
+  return (next: boolean) => {
+    matches = next;
+    for (const listener of listeners) listener({ matches: next } as MediaQueryListEvent);
+  };
 }
 
 afterEach(() => {
   window.matchMedia = originalMatchMedia;
 });
 
-function Fixture(props: { collapsible?: "offcanvas" | "icon" | "none"; onAction?: () => void }) {
+function Fixture(props: { onAction?: () => void }) {
   const sidebar = useSidebar();
   return (
     <>
-      <Sidebar aria-label="Sidebar" collapsible={props.collapsible}>
+      <Sidebar aria-label="Sidebar">
         <SidebarHeader>Brand</SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>Group</SidebarGroupLabel>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive tooltip="First tip">
+                <SidebarMenuButton isActive>
                   <span>First</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Second tip">
+                <SidebarMenuButton>
                   <span>Second</span>
                 </SidebarMenuButton>
                 <SidebarMenuAction aria-label="Remove second" onClick={props.onAction} />
@@ -69,7 +79,7 @@ function Fixture(props: { collapsible?: "offcanvas" | "icon" | "none"; onAction?
       </Sidebar>
       <SidebarInset>
         <SidebarTrigger />
-        <span data-testid="expanded">{sidebar.expanded() ? "yes" : "no"}</span>
+        <span data-testid="open">{sidebar.open() ? "yes" : "no"}</span>
         <button type="button">Outside</button>
       </SidebarInset>
     </>
@@ -77,91 +87,68 @@ function Fixture(props: { collapsible?: "offcanvas" | "icon" | "none"; onAction?
 }
 
 describe("Sidebar", () => {
-  it("renders structure and toggles between expanded and collapsed", async () => {
-    const user = userEvent.setup();
+  it("always shows the desktop sidebar with no way to collapse it", () => {
+    mockViewport(false);
     render(() => (
       <SidebarProvider>
-        <Fixture collapsible="icon" />
+        <Fixture />
       </SidebarProvider>
     ));
     const aside = screen.getByRole("complementary", { name: "Sidebar" });
-    expect(aside).toHaveAttribute("data-state", "expanded");
-    expect(aside).toHaveAttribute("data-collapsible", "");
+    expect(aside).not.toHaveAttribute("data-state");
+    expect(aside).not.toHaveAttribute("data-collapsible");
     expect(screen.getByText("Brand")).toBeInTheDocument();
     expect(screen.getByText("Footer")).toBeInTheDocument();
     expect(screen.getByText("Group")).toBeInTheDocument();
     expect(screen.getByRole("separator")).toBeInTheDocument();
-    expect(screen.getByTestId("expanded")).toHaveTextContent("yes");
-
-    const trigger = screen.getByRole("button", { name: "Hide sidebar" });
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
-    await user.click(trigger);
-    expect(aside).toHaveAttribute("data-state", "collapsed");
-    expect(aside).toHaveAttribute("data-collapsible", "icon");
-    expect(screen.getByRole("button", { name: "Show sidebar" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    expect(screen.getByTestId("expanded")).toHaveTextContent("no");
+    expect(screen.queryByRole("button", { name: /sidebar/ })).toBeNull();
   });
 
-  it("defaults to offcanvas collapse and honours collapsible none", async () => {
-    const user = userEvent.setup();
-    const { unmount } = render(() => (
-      <SidebarProvider defaultOpen={false}>
+  it("marks active menu buttons without a collapsed tooltip", () => {
+    render(() => (
+      <SidebarProvider>
         <Fixture />
-      </SidebarProvider>
-    ));
-    expect(screen.getByRole("complementary", { name: "Sidebar" })).toHaveAttribute(
-      "data-collapsible",
-      "offcanvas",
-    );
-    unmount();
-
-    render(() => (
-      <SidebarProvider>
-        <Fixture collapsible="none" />
-      </SidebarProvider>
-    ));
-    await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
-    expect(screen.getByRole("complementary", { name: "Sidebar" })).toHaveAttribute(
-      "data-collapsible",
-      "",
-    );
-  });
-
-  it("supports controlled open state", async () => {
-    const user = userEvent.setup();
-    const [open, setOpen] = createSignal(true);
-    const onOpenChange = vi.fn((next: boolean) => setOpen(next));
-    render(() => (
-      <SidebarProvider open={open()} onOpenChange={onOpenChange}>
-        <Fixture collapsible="icon" />
-      </SidebarProvider>
-    ));
-    await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(open()).toBe(false);
-    flush(() => setOpen(true));
-    expect(screen.getByRole("complementary", { name: "Sidebar" })).toHaveAttribute(
-      "data-state",
-      "expanded",
-    );
-  });
-
-  it("marks active menu buttons and shows tooltips only when collapsed", async () => {
-    const user = userEvent.setup();
-    render(() => (
-      <SidebarProvider>
-        <Fixture collapsible="icon" />
       </SidebarProvider>
     ));
     const first = screen.getByRole("button", { name: "First" });
     expect(first).toHaveAttribute("data-active", "true");
     expect(first).not.toHaveAttribute("title");
     expect(screen.getByRole("button", { name: "Second" })).not.toHaveAttribute("data-active");
-    await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
-    expect(first).toHaveAttribute("title", "First tip");
+  });
+
+  it("supports a controlled drawer on mobile", async () => {
+    mockViewport(true);
+    const user = userEvent.setup();
+    const [open, setOpen] = createSignal(false);
+    const onOpenChange = vi.fn((next: boolean) => setOpen(next));
+    render(() => (
+      <SidebarProvider open={open()} onOpenChange={onOpenChange}>
+        <Fixture />
+      </SidebarProvider>
+    ));
+    await user.click(screen.getByRole("button", { name: "Show sidebar" }));
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+    expect(open()).toBe(true);
+    expect(await screen.findByRole("dialog", { name: "Sidebar" })).toBeInTheDocument();
+    flush(() => setOpen(false));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shuts the drawer when the viewport widens to the desktop layout", async () => {
+    const resize = mockViewport(true);
+    render(() => (
+      <SidebarProvider defaultOpen={true}>
+        <Fixture />
+      </SidebarProvider>
+    ));
+    await screen.findByRole("dialog", { name: "Sidebar" });
+    flush(() => resize(false));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
+    expect(screen.getByTestId("open")).toHaveTextContent("no");
+    flush(() => resize(true));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeInTheDocument();
   });
 
   it("renders as a dismissible overlay dialog on mobile", async () => {
@@ -169,14 +156,14 @@ describe("Sidebar", () => {
     const user = userEvent.setup();
     render(() => (
       <SidebarProvider defaultOpen={false}>
-        <Fixture collapsible="icon" />
+        <Fixture />
       </SidebarProvider>
     ));
     await Promise.resolve();
     flush();
     expect(screen.queryByRole("complementary")).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByTestId("expanded")).toHaveTextContent("yes");
+    expect(screen.getByTestId("open")).toHaveTextContent("no");
 
     await user.click(screen.getByRole("button", { name: "Show sidebar" }));
     const dialog = await screen.findByRole("dialog", { name: "Sidebar" });
@@ -195,27 +182,18 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("lays out the mobile presentation from the first render, never the desktop rail", () => {
+  it("lays out the mobile presentation from the first render, never the desktop sidebar", () => {
     mockViewport(true);
     render(() => (
-      <SidebarProvider defaultOpen={false}>
-        <Fixture collapsible="icon" />
+      <SidebarProvider>
+        <Fixture />
       </SidebarProvider>
     ));
     expect(screen.queryByRole("complementary")).toBeNull();
-    expect(screen.getByTestId("expanded")).toHaveTextContent("yes");
-  });
-
-  it("renders a closed desktop sidebar collapsed from the first render", () => {
-    mockViewport(false);
-    render(() => (
-      <SidebarProvider defaultOpen={false}>
-        <Fixture collapsible="icon" />
-      </SidebarProvider>
-    ));
-    const aside = screen.getByRole("complementary", { name: "Sidebar" });
-    expect(aside).toHaveAttribute("data-state", "collapsed");
-    expect(aside).toHaveAttribute("data-collapsible", "icon");
+    expect(screen.getByRole("button", { name: "Show sidebar" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   it("renders menu actions beside their menu items", async () => {
@@ -223,7 +201,7 @@ describe("Sidebar", () => {
     const onAction = vi.fn();
     render(() => (
       <SidebarProvider>
-        <Fixture collapsible="icon" onAction={onAction} />
+        <Fixture onAction={onAction} />
       </SidebarProvider>
     ));
     const action = screen.getByRole("button", { name: "Remove second" });

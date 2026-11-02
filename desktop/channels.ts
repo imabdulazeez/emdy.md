@@ -1,0 +1,28 @@
+export const CHANNELS = {
+  folderOpen: "emdy:folder:open",
+  folderEnsure: "emdy:folder:ensure",
+  folderList: "emdy:folder:list",
+  folderStat: "emdy:folder:stat",
+  folderRead: "emdy:folder:read",
+  folderWrite: "emdy:folder:write",
+  folderRemove: "emdy:folder:remove",
+  folderRename: "emdy:folder:rename",
+  libraryLocation: "emdy:library:location",
+  libraryChoose: "emdy:library:choose",
+  libraryReveal: "emdy:library:reveal",
+  libraryRevealFile: "emdy:library:reveal-file",
+  libraryChanged: "emdy:library:changed",
+  filesList: "emdy:files:list",
+  filesTake: "emdy:files:take",
+  filesOpen: "emdy:files:open",
+  filesSave: "emdy:files:save",
+  filesClose: "emdy:files:close",
+  filesReveal: "emdy:files:reveal",
+  filesRequested: "emdy:files:requested",
+  filesChanged: "emdy:files:changed",
+  beforeClose: "emdy:window:before-close",
+  closeReady: "emdy:window:close-ready",
+  menuCommand: "emdy:menu:command",
+} as const;
+
+export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];

@@ -11,7 +11,7 @@ function host() {
   };
   const target: DownloadHost = {
     document: {
-      createElement: (() => anchor) as Document["createElement"],
+      createElement: (() => anchor) as unknown as Document["createElement"],
       body: document.body,
     },
     createObjectURL: (blob) => {

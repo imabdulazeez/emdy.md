@@ -71,3 +71,27 @@ export function activeOutlineIndex(outline: readonly OutlineEntry[], cursorLine:
   }
   return active;
 }
+
+export interface OutlineRow extends OutlineEntry {
+  number: string | null;
+  label: string;
+  sectionStart: boolean;
+}
+
+const LEADING_NUMBER = /^((?:\d+\.)+\d*|\d+\))\s+(\S.*)$/;
+
+export function outlineRows(outline: readonly OutlineEntry[]): OutlineRow[] {
+  return outline.map((entry, index) => {
+    const match = LEADING_NUMBER.exec(entry.text);
+    return {
+      ...entry,
+      number: match ? match[1] : null,
+      label: match ? match[2] : entry.text,
+      sectionStart: index > 0 && entry.level < outline[index - 1].level,
+    };
+  });
+}
+
+export function outlineNumberWidth(rows: readonly OutlineRow[]): number {
+  return rows.reduce((width, row) => Math.max(width, row.number?.length ?? 0), 0);
+}

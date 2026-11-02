@@ -12,6 +12,7 @@ import {
   documents,
   loadDocuments,
   openDocument,
+  openInSplit,
   replaceDocument,
   resetDocumentState,
   saveDocumentText,
@@ -20,8 +21,12 @@ import {
 } from "~/state/document";
 import { registerEditorApi, resetEditorApiState } from "~/state/editor-api";
 import { layoutMode, resetLayoutState, setLayoutMode } from "~/state/layout";
-import { resetLibraryState } from "~/state/library";
-import { resetThemeState, setThemePreference, themePreference } from "~/state/theme";
+import { createMemoryDirectory } from "~/lib/storage/directory";
+import { resetLibraryState, startLibrary, useLibraryDirectory } from "~/state/library";
+import { applyOpenedFiles, isOpenedFile } from "~/state/opened-files";
+import { DESKTOP_BRIDGE_KEY, type DesktopPlatform } from "~/lib/desktop/bridge";
+import { createMemoryBridge, type MemoryBridge } from "~/lib/desktop/memory-bridge";
+import { resetThemeState } from "~/state/theme";
 import { resetNavigationState, view } from "~/state/navigation";
 import {
   requestSearch,
@@ -32,8 +37,16 @@ import {
   sidebarOpen,
   editorFocusRequested,
 } from "~/state/ui";
-import { pinDocument, pinnedDocumentIds, resetWorkspaceState } from "~/state/workspace";
+import {
+  otherFoldersCollapsed,
+  pinDocument,
+  pinnedDocumentIds,
+  resetWorkspaceState,
+  setOtherFoldersCollapsed,
+  splitLayout,
+} from "~/state/workspace";
 import { automaticDocumentIcon } from "~/lib/document-icon";
+import { ariaKeyShortcuts, isMacPlatform, shortcutTitle } from "~/lib/shortcuts";
 import AppSidebar from "./AppSidebar";
 import { SidebarProvider, SidebarTrigger } from "./ui/sidebar";
 
@@ -49,9 +62,17 @@ vi.mock("~/lib/document-icon", async (importOriginal) => {
 
 const originalMatchMedia = window.matchMedia;
 
-beforeEach(() => resetDocumentState(TEST_DOCUMENTS));
+let restoreDirectory: () => void;
+
+beforeEach(async () => {
+  const directory = createMemoryDirectory();
+  restoreDirectory = useLibraryDirectory(async () => directory);
+  await startLibrary();
+  resetDocumentState(TEST_DOCUMENTS);
+});
 
 afterEach(() => {
+  restoreDirectory();
   window.matchMedia = originalMatchMedia;
   resetNavigationState();
   window.history.replaceState(null, "", "/");
@@ -101,18 +122,18 @@ describe("AppSidebar", () => {
   it("renders brand, the document list, and footer controls", () => {
     mount();
     expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
-    expect(screen.getByText("emdy.md")).toBeInTheDocument();
-    expect(screen.getByText("emdy.md").parentElement?.querySelector("svg[data-logo]")).toHaveClass(
+    expect(screen.getByText("emdy")).toBeInTheDocument();
+    expect(screen.getByText("emdy").parentElement?.querySelector("svg[data-logo]")).toHaveClass(
       "size-6",
     );
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.queryByText("Documents")).toBeNull();
-    expect(screen.getByText("emdy.md").parentElement).toContainElement(
+    expect(screen.getByText("emdy").parentElement).toContainElement(
       screen.getByRole("button", { name: "New document" }),
     );
     expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeInTheDocument();
-    expect(screen.getByText("emdy.md").parentElement).toContainElement(
+    expect(screen.getByText("emdy").parentElement).toContainElement(
       screen.getByRole("button", { name: "Settings" }),
     );
     expect(screen.queryByRole("button", { name: "Import documents" })).toBeNull();
@@ -120,6 +141,11 @@ describe("AppSidebar", () => {
     expect(screen.queryByText("Mode")).toBeNull();
     expect(screen.queryByRole("button", { name: /Raw Markdown/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Focus mode/ })).toBeNull();
+  });
+
+  it("lets the desktop window be dragged by the sidebar header", () => {
+    mount();
+    expect(screen.getByText("emdy").parentElement).toHaveAttribute("data-window-drag");
   });
 
   it("shows the title beside a generated icon for each document", () => {
@@ -134,16 +160,6 @@ describe("AppSidebar", () => {
       expect(icon).toHaveAttribute("data-document-icon", "automatic");
       expect(icon).toHaveAttribute("aria-hidden", "true");
     }
-  });
-
-  it("keeps the document icon visible when collapsed to icons", () => {
-    mount();
-    const active = screen.getByRole("button", { name: TEST_DOCUMENTS[0].title });
-    expect(active.querySelector("[data-icon=file]")).toBeNull();
-    expect(active).toHaveClass(
-      "group-data-[collapsible=icon]:[&>:not(svg):not([data-document-icon])]:hidden",
-    );
-    expect(active.querySelector("[data-document-icon] text")?.textContent).toMatch(/^[A-Z]{2}$/);
   });
 
   it("lists every document with the active one marked", () => {
@@ -205,6 +221,51 @@ describe("AppSidebar", () => {
     vi.useRealTimers();
     expect(groupNames()).toEqual(["Today"]);
     expect(namesInGroup("Today")).toEqual(["Forgotten", "Fresh"]);
+  });
+
+  describe("focus when rows move", () => {
+    const load = () =>
+      flush(() =>
+        loadDocuments([
+          { id: "aaa111", title: "Fresh", text: "", modified: daysAgo(0) },
+          { id: "ccc333", title: "Second", text: "", modified: daysAgo(0) - 1000 },
+          { id: "fff666", title: "Forgotten", text: "", modified: daysAgo(400) },
+        ]),
+      );
+    const edit = (id: string) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: daysAgo(0) + 1000 });
+      flush(() => saveDocumentText(id, "written again"));
+      vi.useRealTimers();
+    };
+
+    it("keeps focus on a row that moves within its group", () => {
+      load();
+      mount();
+      const row = screen.getByRole("button", { name: "Second" });
+      row.focus();
+      edit("ccc333");
+      expect(namesInGroup("Today")).toEqual(["Second", "Fresh"]);
+      expect(screen.getByRole("button", { name: "Second" })).toBe(row);
+      expect(row).toHaveFocus();
+    });
+
+    it("follows a row that moves to another group", () => {
+      load();
+      mount();
+      screen.getByRole("button", { name: "Forgotten" }).focus();
+      edit("fff666");
+      expect(namesInGroup("Today")).toEqual(["Forgotten", "Fresh", "Second"]);
+      expect(screen.getByRole("button", { name: "Forgotten" })).toHaveFocus();
+    });
+
+    it("leaves focus alone when it is outside the list", () => {
+      load();
+      mount();
+      const search = screen.getByRole("searchbox", { name: "Search documents" });
+      search.focus();
+      edit("fff666");
+      expect(search).toHaveFocus();
+    });
   });
 
   it("neither re-renders nor recomputes rows when an edit changes only the text", async () => {
@@ -386,14 +447,21 @@ describe("AppSidebar", () => {
       expect(searchBox()).toHaveAttribute("title", "Search documents (Ctrl+P)");
     });
 
-    it("holds a search request until the sidebar expands", async () => {
-      flush(() => setSidebarOpen(false));
+    it("holds a search request until the mobile drawer opens", async () => {
+      window.matchMedia = (query) => {
+        const media = originalMatchMedia(query);
+        Object.defineProperty(media, "matches", { value: true });
+        return media;
+      };
       mount();
+      await Promise.resolve();
       flush(requestSearch);
       await Promise.resolve();
       expect(screen.queryByRole("searchbox")).toBeNull();
       expect(searchRequested()).toBe(true);
       flush(() => setSidebarOpen(true));
+      await screen.findByRole("dialog", { name: "Sidebar" });
+      await Promise.resolve();
       await Promise.resolve();
       expect(searchBox()).toHaveFocus();
       expect(searchRequested()).toBe(false);
@@ -419,13 +487,13 @@ describe("AppSidebar", () => {
       expect(searchBox()).toHaveFocus();
     });
 
-    it("hides the search field and results while collapsed to icons", async () => {
+    it("keeps the search field and results on the desktop whatever the drawer state", async () => {
       const user = userEvent.setup();
       mount();
       await user.type(searchBox(), "week");
       flush(() => setSidebarOpen(false));
-      expect(screen.queryByRole("searchbox")).toBeNull();
-      expect(screen.getByRole("list", { name: "Documents" })).toBeInTheDocument();
+      expect(searchBox()).toHaveValue("week");
+      expect(screen.getByRole("list", { name: "Search results" })).toBeInTheDocument();
     });
   });
 
@@ -505,6 +573,21 @@ describe("AppSidebar", () => {
       "aria-current",
       "page",
     );
+  });
+
+  it("keeps New document disabled until the library has loaded", async () => {
+    resetLibraryState();
+    resetDocumentState(TEST_DOCUMENTS);
+    const user = userEvent.setup();
+    mount();
+    const button = screen.getByRole("button", { name: "New document" });
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(documents()).toHaveLength(TEST_DOCUMENTS.length);
+
+    await startLibrary();
+    flush();
+    expect(button).toBeEnabled();
   });
 
   it("asks for confirmation before deleting and can cancel", async () => {
@@ -637,35 +720,17 @@ describe("AppSidebar", () => {
     expect(title()).toBe("Untitled");
   });
 
-  it("collapses to icon buttons for shortcuts and theme when closed", async () => {
-    const user = userEvent.setup();
+  it("never collapses to an icon rail on the desktop", () => {
     mount();
     flush(() => setSidebarOpen(false));
-    expect(screen.queryByRole("group", { name: "Theme" })).toBeNull();
-    const [header, settings] = screen.getAllByRole("button", { name: "Settings" });
-    expect(header).toHaveClass("group-data-[collapsible=icon]:hidden");
-    expect(settings).toHaveAttribute("title", expect.stringMatching(/^Settings \((⌘,|Ctrl\+,)\)$/));
-    expect(settings).toHaveAttribute(
-      "aria-keyshortcuts",
-      expect.stringMatching(/^(Meta|Control)\+,$/),
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).not.toHaveAttribute(
+      "data-collapsible",
     );
-    expect(screen.queryByRole("button", { name: "Import documents" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Export all documents" })).toBeNull();
-    const shortcuts = screen.getByRole("button", { name: "Keyboard shortcuts" });
-    expect(shortcuts).toHaveAttribute(
-      "title",
-      expect.stringMatching(/^Keyboard shortcuts \((⌘\/|Ctrl\+\/)\)$/),
-    );
-    expect(shortcuts).toHaveAttribute(
-      "aria-keyshortcuts",
-      expect.stringMatching(/^(Meta|Control)\+\/$/),
-    );
-    const cycle = screen.getByRole("button", { name: "Theme: System. Switch theme" });
-    expect(cycle).toHaveAttribute("title", "Theme: System");
-    await user.click(cycle);
-    expect(themePreference()).toBe("light");
-    flush(() => setThemePreference("dark"));
-    expect(screen.getByRole("button", { name: "Theme: Dark. Switch theme" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Settings" })).toHaveLength(1);
+    expect(screen.getByRole("searchbox")).toBeInTheDocument();
+    expect(screen.getByText("emdy")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Switch theme/ })).toBeNull();
   });
 });
 
@@ -681,7 +746,7 @@ describe("AppSidebar context menus", () => {
     const target = TEST_DOCUMENTS[1];
     await rightClick(user, screen.getByRole("button", { name: target.title }));
     expect(await screen.findByRole("menu", { name: target.title })).toBeInTheDocument();
-    expect(menuItems()).toEqual(["Change icon…", "Pin", "Delete…"]);
+    expect(menuItems()).toEqual(["Open in split view", "Change icon…", "Pin", "Delete…"]);
     expect(screen.getByRole("menuitem", { name: "Delete…" })).toHaveAttribute(
       "data-danger",
       "true",
@@ -734,7 +799,13 @@ describe("AppSidebar context menus", () => {
     await vi.waitFor(() => expect(button()).toHaveFocus());
 
     await rightClick(user, button());
-    expect(menuItems()).toEqual(["Change icon…", "Use automatic icon", "Pin", "Delete…"]);
+    expect(menuItems()).toEqual([
+      "Open in split view",
+      "Change icon…",
+      "Use automatic icon",
+      "Pin",
+      "Delete…",
+    ]);
     await user.click(screen.getByRole("menuitem", { name: "Use automatic icon" }));
     expect(documents().find((doc) => doc.id === target.id)?.icon).toBeNull();
     expect(button().querySelector("[data-document-icon]")).toHaveAttribute(
@@ -755,13 +826,13 @@ describe("AppSidebar context menus", () => {
     );
   });
 
-  it("leaves delete out of the menu while collapsed to icons", async () => {
+  it("offers delete on the desktop whatever the drawer state", async () => {
     const user = userEvent.setup();
     mount();
     flush(() => setSidebarOpen(false));
     await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
     await screen.findByRole("menu");
-    expect(menuItems()).toEqual(["Change icon…", "Pin"]);
+    expect(menuItems()).toEqual(["Open in split view", "Change icon…", "Pin", "Delete…"]);
   });
 
   it("offers a new document when right-clicking the empty list area", async () => {
@@ -769,13 +840,26 @@ describe("AppSidebar context menus", () => {
     mount();
     const content = screen
       .getByRole("navigation", { name: "Main" })
-      .closest<HTMLElement>("[data-sidebar=content]")!;
+      .querySelector<HTMLElement>("[data-sidebar=content]")!;
     await rightClick(user, content);
     expect(await screen.findByRole("menu", { name: "Library" })).toBeInTheDocument();
     expect(menuItems()).toEqual(["New document"]);
     await user.click(screen.getByRole("menuitem", { name: "New document" }));
     expect(documents()).toHaveLength(TEST_DOCUMENTS.length + 1);
     expect(title()).toBe("Untitled");
+  });
+
+  it("ignores New document in the library menu while the library is loading", async () => {
+    resetLibraryState();
+    resetDocumentState(TEST_DOCUMENTS);
+    const user = userEvent.setup();
+    mount();
+    const content = screen
+      .getByRole("navigation", { name: "Main" })
+      .querySelector<HTMLElement>("[data-sidebar=content]")!;
+    await rightClick(user, content);
+    await user.click(await screen.findByRole("menuitem", { name: "New document" }));
+    expect(documents()).toHaveLength(TEST_DOCUMENTS.length);
   });
 
   it("opens the document menu from the keyboard and returns focus on Escape", async () => {
@@ -785,7 +869,7 @@ describe("AppSidebar context menus", () => {
     button.focus();
     await user.keyboard("{Shift>}{F10}{/Shift}");
     await vi.waitFor(() =>
-      expect(screen.getByRole("menuitem", { name: "Change icon…" })).toHaveFocus(),
+      expect(screen.getByRole("menuitem", { name: "Open in split view" })).toHaveFocus(),
     );
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();
@@ -847,9 +931,7 @@ describe("AppSidebar deletion motion", () => {
   async function confirmWithKeyboard(user: ReturnType<typeof userEvent.setup>, title: string) {
     screen.getByRole("button", { name: title }).focus();
     await user.keyboard("{Shift>}{F10}{/Shift}");
-    await vi.waitFor(() =>
-      expect(screen.getByRole("menuitem", { name: "Change icon…" })).toHaveFocus(),
-    );
+    await vi.waitFor(() => expect(screen.getAllByRole("menuitem")[0]).toHaveFocus());
     await user.keyboard("{End}{Enter}");
     await vi.waitFor(() =>
       expect(within(prompt(title)).getByRole("button", { name: "Delete" })).toHaveFocus(),
@@ -1154,5 +1236,262 @@ describe("AppSidebar pinning", () => {
     expect(screen.queryByText("Pinned")).toBeNull();
     expect(namesInGroup("Titles")).toEqual(["Fresh", "Recent"]);
     expect(namesInGroup("Contents")).toEqual(["Old"]);
+  });
+});
+
+describe("AppSidebar opened files", () => {
+  const OUTSIDE = {
+    id: "out001",
+    title: "Outside notes",
+    text: "# Outside",
+    icon: null,
+    fixedTitle: true as const,
+  };
+  const host = globalThis as Record<string, unknown>;
+
+  const rightClick = (user: ReturnType<typeof userEvent.setup>, target: Element) =>
+    user.pointer({ keys: "[MouseRight]", target });
+  const menuItems = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
+
+  function openOutside(modified = Date.now()) {
+    flush(() => applyOpenedFiles({ added: [{ ...OUTSIDE, modified }], updated: [], removed: [] }));
+  }
+
+  function desktop(platform: DesktopPlatform = "darwin"): MemoryBridge {
+    const bridge = createMemoryBridge(null, { platform });
+    host[DESKTOP_BRIDGE_KEY] = bridge;
+    return bridge;
+  }
+
+  afterEach(() => {
+    delete host[DESKTOP_BRIDGE_KEY];
+  });
+
+  it("lists files opened from other folders in a shelf below the library's scroll area", () => {
+    openOutside();
+    mount();
+    expect(groupNames()).not.toContain("Other folders");
+    expect(within(documentList()).queryByRole("button", { name: "Outside notes" })).toBeNull();
+    expect(namesInGroup("Other folders")).toEqual(["Outside notes"]);
+    const shelf = screen.getByRole("region", { name: "Other folders" });
+    expect(shelf.closest("[data-sidebar=content]")).toBeNull();
+    expect(shelf.closest("nav")).toBe(screen.getByRole("navigation", { name: "Main" }));
+    expect(screen.getAllByRole("button", { name: "Outside notes" })).toHaveLength(1);
+  });
+
+  it("hides the shelf while searching, where opened files appear among the results", async () => {
+    const user = userEvent.setup();
+    openOutside();
+    mount();
+    await user.type(screen.getByRole("searchbox", { name: "Search documents" }), "Outside");
+    expect(screen.queryByRole("region", { name: "Other folders" })).toBeNull();
+    expect(namesInGroup("Titles")).toEqual(["Outside notes"]);
+  });
+
+  it("collapses and expands the other folders group from its heading", async () => {
+    const user = userEvent.setup();
+    openOutside();
+    mount();
+    const toggle = screen.getByRole("button", { name: "Other folders" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("aria-controls", "documents-opened-list");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("list", { name: "Other folders" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Outside notes" })).toBeNull();
+    expect(otherFoldersCollapsed()).toBe(true);
+    expect(toggle).toHaveTextContent("Other folders(1)");
+    toggle.focus();
+    await user.keyboard("{Enter}");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(namesInGroup("Other folders")).toEqual(["Outside notes"]);
+    expect(otherFoldersCollapsed()).toBe(false);
+  });
+
+  it("starts collapsed when the group was left collapsed", () => {
+    flush(() => setOtherFoldersCollapsed(true));
+    openOutside();
+    mount();
+    expect(screen.getByRole("button", { name: "Other folders" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByRole("button", { name: "Outside notes" })).toBeNull();
+  });
+
+  it("keeps the active file visible in the collapsed shelf", () => {
+    flush(() => setOtherFoldersCollapsed(true));
+    openOutside();
+    flush(() =>
+      applyOpenedFiles({
+        added: [{ ...OUTSIDE, id: "out002", title: "Second outside", modified: Date.now() }],
+        updated: [],
+        removed: [],
+      }),
+    );
+    mount();
+    flush(() => openDocument(OUTSIDE.id));
+    const toggle = screen.getByRole("button", { name: "Other folders" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveTextContent("(2)");
+    expect(namesInGroup("Other folders")).toEqual(["Outside notes"]);
+    flush(() => openDocument(TEST_DOCUMENTS[0].id));
+    expect(screen.queryByRole("list", { name: "Other folders" })).toBeNull();
+  });
+
+  it("moves a pinned opened file to the pinned group", () => {
+    openOutside();
+    flush(() => pinDocument(OUTSIDE.id));
+    mount();
+    expect(namesInGroup("Pinned")).toEqual(["Outside notes"]);
+    expect(screen.queryByRole("region", { name: "Other folders" })).toBeNull();
+  });
+
+  it("closes an opened file instead of offering to delete it", async () => {
+    const user = userEvent.setup();
+    openOutside();
+    mount();
+    expect(screen.queryByRole("button", { name: "Delete Outside notes" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Close Outside notes" }));
+    expect(documents().some((doc) => doc.id === OUTSIDE.id)).toBe(false);
+    expect(screen.queryByRole("group", { name: "Delete Outside notes?" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Other folders" })).toBeNull();
+  });
+
+  it("offers Close rather than Delete in an opened file's context menu", async () => {
+    const user = userEvent.setup();
+    openOutside();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: "Outside notes" }));
+    expect(menuItems()).toEqual(["Open in split view", "Change icon…", "Pin", "Close"]);
+    const close = screen.getByRole("menuitem", { name: "Close" });
+    expect(close).not.toHaveAttribute("data-danger");
+    await user.click(close);
+    expect(documents().some((doc) => doc.id === OUTSIDE.id)).toBe(false);
+  });
+
+  it("advertises the desktop app's New document shortcut", () => {
+    desktop();
+    mount();
+    const mac = isMacPlatform();
+    const create = screen.getByRole("button", { name: "New document" });
+    expect(create).toHaveAttribute("title", shortcutTitle("New document", "Mod-n", mac));
+    expect(create).toHaveAttribute("aria-keyshortcuts", ariaKeyShortcuts("Mod-n", mac));
+  });
+
+  it("offers to reveal every document in the desktop app with the platform's wording", async () => {
+    const user = userEvent.setup();
+    desktop("win32");
+    openOutside();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
+    expect(menuItems()).toEqual([
+      "Open in split view",
+      "Change icon…",
+      "Pin",
+      "Reveal in File Explorer",
+      "Delete…",
+    ]);
+    await user.keyboard("{Escape}");
+    await rightClick(user, screen.getByRole("button", { name: "Outside notes" }));
+    expect(menuItems()).toEqual([
+      "Open in split view",
+      "Change icon…",
+      "Pin",
+      "Reveal in File Explorer",
+      "Close",
+    ]);
+  });
+
+  it("reveals an opened file through the desktop app", async () => {
+    const user = userEvent.setup();
+    const bridge = desktop();
+    openOutside();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: "Outside notes" }));
+    await user.click(screen.getByRole("menuitem", { name: "Reveal in Finder" }));
+    await vi.waitFor(() => expect(bridge.revealedFiles()).toEqual([OUTSIDE.id]));
+    expect(isOpenedFile(OUTSIDE.id)).toBe(true);
+  });
+
+  it("offers no reveal action in the browser", async () => {
+    const user = userEvent.setup();
+    mount();
+    await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
+    expect(menuItems().some((label) => label?.startsWith("Reveal"))).toBe(false);
+  });
+});
+
+describe("AppSidebar split view", () => {
+  const modifier = () => (isMacPlatform() ? "Meta" : "Control");
+  const rightClick = (user: ReturnType<typeof userEvent.setup>, target: Element) =>
+    user.pointer({ keys: "[MouseRight]", target });
+
+  it("opens a document beside the active one on Cmd- or Ctrl-click", async () => {
+    const user = userEvent.setup();
+    mount();
+    const [first, second] = TEST_DOCUMENTS;
+    await user.keyboard(`{${modifier()}>}`);
+    await user.click(screen.getByRole("button", { name: second.title }));
+    await user.keyboard(`{/${modifier()}}`);
+    expect(activeDocumentId()).toBe(second.id);
+    expect(splitLayout()).toEqual({ other: first.id, side: "right" });
+    expect(editorFocusRequested()).toBe(true);
+  });
+
+  it("opens in the same pane on a plain or Shift-click", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
+    await user.keyboard("{Shift>}");
+    await user.click(screen.getByRole("button", { name: TEST_DOCUMENTS[2].title }));
+    await user.keyboard("{/Shift}");
+    expect(activeDocumentId()).toBe(TEST_DOCUMENTS[2].id);
+    expect(splitLayout()).toBeNull();
+  });
+
+  it("offers Open in split view for documents other than the active one", async () => {
+    const user = userEvent.setup();
+    mount();
+    const [first, second] = TEST_DOCUMENTS;
+    await rightClick(user, screen.getByRole("button", { name: first.title }));
+    expect(screen.queryByRole("menuitem", { name: "Open in split view" })).toBeNull();
+    await user.keyboard("{Escape}");
+    await rightClick(user, screen.getByRole("button", { name: second.title }));
+    await user.click(await screen.findByRole("menuitem", { name: "Open in split view" }));
+    expect(activeDocumentId()).toBe(second.id);
+    expect(splitLayout()).toEqual({ other: first.id, side: "right" });
+  });
+
+  it("focuses the other pane when its document is clicked", async () => {
+    const user = userEvent.setup();
+    const [first, second] = TEST_DOCUMENTS;
+    flush(() => openInSplit(second.id));
+    mount();
+    await user.click(screen.getByRole("button", { name: first.title }));
+    expect(activeDocumentId()).toBe(first.id);
+    expect(splitLayout()).toEqual({ other: second.id, side: "left" });
+    expect(editorFocusRequested()).toBe(true);
+  });
+
+  it("keeps split view out of the narrow layout", async () => {
+    window.matchMedia = (query) => {
+      const media = originalMatchMedia(query);
+      Object.defineProperty(media, "matches", { value: true });
+      return media;
+    };
+    const user = userEvent.setup();
+    flush(() => setSidebarOpen(true));
+    mount();
+    const target = TEST_DOCUMENTS[1];
+    await rightClick(user, await screen.findByRole("button", { name: target.title }));
+    await screen.findByRole("menu");
+    expect(screen.queryByRole("menuitem", { name: "Open in split view" })).toBeNull();
+    await user.keyboard("{Escape}");
+    await user.keyboard(`{${modifier()}>}`);
+    await user.click(screen.getByRole("button", { name: target.title }));
+    await user.keyboard(`{/${modifier()}}`);
+    expect(activeDocumentId()).toBe(target.id);
+    expect(splitLayout()).toBeNull();
   });
 });

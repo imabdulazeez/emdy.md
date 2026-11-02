@@ -88,6 +88,16 @@ describe("live table rendering", () => {
     expect(url).toHaveAttribute("href", "https://user@example.com");
   });
 
+  it("keeps and links bare URLs pasted into a cell", () => {
+    const editor = mount("| h |\n| - |\n| see https://example.com/docs and www.example.org |");
+    const cell = widget(editor)!.querySelector("td")!;
+    expect(cell).toHaveTextContent("see https://example.com/docs and www.example.org");
+    const [url, www] = [...cell.querySelectorAll("a")];
+    expect(url).toHaveAttribute("href", "https://example.com/docs");
+    expect(url).toHaveTextContent("https://example.com/docs");
+    expect(www).toHaveAttribute("href", "https://www.example.org");
+  });
+
   it("decodes character entities in cells", () => {
     const editor = mount("| h |\n| - |\n| Tom &amp; Jerry &#169; &copy; |");
     expect(widget(editor)!.querySelector("td")).toHaveTextContent("Tom & Jerry © ©");

@@ -4,6 +4,7 @@ import {
   MAX_STEM_BYTES,
   filenameFor,
   isMarkdownFile,
+  markdownExtension,
   sameFilename,
   sanitizeStem,
   titleFromFilename,
@@ -16,6 +17,22 @@ describe("isMarkdownFile", () => {
     expect(isMarkdownFile(".hidden.md")).toBe(false);
     expect(isMarkdownFile("index.json")).toBe(false);
     expect(isMarkdownFile("md")).toBe(false);
+  });
+});
+
+describe("markdownExtension", () => {
+  it("returns the extension as written for .md and .markdown names", () => {
+    expect(markdownExtension("Notes.md")).toBe(".md");
+    expect(markdownExtension("README.MD")).toBe(".MD");
+    expect(markdownExtension("Plan.Markdown")).toBe(".Markdown");
+    expect(markdownExtension(".hidden.md")).toBe(".md");
+  });
+
+  it("rejects other extensions and bare extensions", () => {
+    expect(markdownExtension("notes.txt")).toBeNull();
+    expect(markdownExtension("notes.mdx")).toBeNull();
+    expect(markdownExtension(".md")).toBeNull();
+    expect(markdownExtension(".markdown")).toBeNull();
   });
 });
 
@@ -54,6 +71,7 @@ describe("titleFromFilename", () => {
   it("drops the extension and tidies whitespace", () => {
     expect(titleFromFilename("Reading list.md")).toBe("Reading list");
     expect(titleFromFilename("  spaced   out .MD")).toBe("spaced out");
+    expect(titleFromFilename("Road map.markdown")).toBe("Road map");
     expect(titleFromFilename("plain")).toBe("plain");
     expect(titleFromFilename(".md")).toBe(FALLBACK_STEM);
   });
@@ -63,6 +81,7 @@ describe("filenameFor", () => {
   it("adds numeric suffixes to avoid collisions, ignoring case", () => {
     expect(filenameFor("Untitled", [])).toBe("Untitled.md");
     expect(filenameFor("Untitled", ["untitled.md"])).toBe("Untitled 2.md");
+    expect(filenameFor("Plan", ["plan.markdown"], undefined, ".markdown")).toBe("Plan 2.markdown");
     expect(filenameFor("Untitled", ["Untitled.md", "Untitled 2.md"])).toBe("Untitled 3.md");
   });
 

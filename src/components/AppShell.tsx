@@ -1,28 +1,40 @@
 import { createEffect, Match, onSettled, Show, Switch } from "solid-js";
 import { runWhenIdle } from "~/lib/debounce";
+import { desktopBridge } from "~/lib/desktop/bridge";
 import { hasOpenComposerMenu } from "~/lib/editor/composer";
+import { matchesMediaQuery, MOBILE_MEDIA_QUERY } from "~/lib/media";
 import { getRenderClient } from "~/lib/preview/render-client";
 import { startPersistenceSync } from "~/lib/storage/persisted";
 import {
-  ariaKeyShortcuts,
   handleGlobalShortcut,
+  isGlobalShortcutId,
   isMacPlatform,
-  shortcutKeys,
-  shortcutTitle,
+  runGlobalShortcut,
+  type GlobalShortcutHandlers,
 } from "~/lib/shortcuts";
 import { pageTitle } from "~/lib/title";
 import { holdTransitions } from "~/lib/transitions";
+import { startDesktopSync } from "~/state/desktop";
 import { createDocument, docText, hasDocuments, title } from "~/state/document";
 import { layoutMode, setLayoutMode } from "~/state/layout";
-import { currentLibrary, libraryStatus, startLibrary, trackLibrary } from "~/state/library";
+import {
+  currentLibrary,
+  libraryStatus,
+  retryLibrarySave,
+  startLibrary,
+  trackLibrary,
+} from "~/state/library";
 import { closeSettings, startHistorySync, toggleSettings, view } from "~/state/navigation";
 import { updateStatsFromText } from "~/state/stats";
+import { cn } from "~/lib/utils";
+import { closeSplit, isSplit, switchPane } from "~/state/split";
 import { applyTheme, watchSystemTheme } from "~/state/theme";
 import { displayedAppearance, displayedColors } from "~/state/theme-draft";
 import { applyFontAttribute, documentFont } from "~/state/typography";
 import {
   focusMode,
   requestEditorFocus,
+  requestPaneFocus,
   requestSearch,
   setFocusMode,
   setShortcutsOpen,
@@ -35,9 +47,9 @@ import {
 } from "~/state/ui";
 import AppSidebar from "./AppSidebar";
 import DocumentStatus from "./DocumentStatus";
-import Editor from "./Editor";
+import EditorPanes from "./EditorPanes";
 import EmptyLibrary from "./EmptyLibrary";
-import { Icon } from "./icons";
+import ExitFocusButton from "./ExitFocusButton";
 import LibraryGate from "./LibraryGate";
 import Outline from "./Outline";
 import SettingsPage from "./SettingsPage";
@@ -47,7 +59,6 @@ import StorageError from "./StorageError";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar";
 
 function Workspace() {
-  const mac = isMacPlatform();
   return (
     <>
       <Show when={!focusMode()}>
@@ -57,27 +68,19 @@ function Workspace() {
         class="@container relative flex min-h-0 min-w-0 flex-1"
         aria-label="Document"
         data-layout={layoutMode()}
+        data-split={isSplit() ? "true" : undefined}
       >
         <Show when={!focusMode()}>
           <Outline />
         </Show>
         <div class="min-h-0 min-w-0 flex-1" data-testid="editor-pane">
-          <Editor mode={layoutMode()} />
+          <EditorPanes mode={layoutMode()} />
         </div>
         <Show when={!focusMode()}>
           <DocumentStatus />
         </Show>
         <Show when={focusMode()}>
-          <button
-            type="button"
-            class="icon-button absolute top-3 right-3 size-8"
-            aria-label="Exit focus mode"
-            title={shortcutTitle("Exit focus mode", shortcutKeys("exit-focus"), mac)}
-            aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("exit-focus"), mac)}
-            onClick={() => setFocusMode(false)}
-          >
-            <Icon name="minimize" size={16} />
-          </button>
+          <ExitFocusButton class={cn("absolute top-3 right-3 size-8", isSplit() && "md:hidden")} />
         </Show>
       </main>
     </>
@@ -108,8 +111,41 @@ export default function AppShell() {
     if (!currentLibrary()) void startLibrary();
     const cancelRenderWarmup = runWhenIdle(() => void getRenderClient());
     const stopPersistence = startPersistenceSync(window);
+    const stopDesktopSync = startDesktopSync();
     const stopThemeWatch = watchSystemTheme(window);
     const mac = isMacPlatform();
+
+    const handlers: GlobalShortcutHandlers = {
+      setLayout: setLayoutMode,
+      toggleSidebar: () => {
+        if (matchesMediaQuery(MOBILE_MEDIA_QUERY)) toggleSidebar();
+      },
+      toggleFocusMode,
+      toggleShortcuts,
+      toggleSettings: () => toggleSettings(),
+      focusSearch: () => {
+        setShortcutsOpen(false);
+        setFocusMode(false);
+        if (matchesMediaQuery(MOBILE_MEDIA_QUERY)) setSidebarOpen(true);
+        requestSearch();
+      },
+      createDocument: () => {
+        if (libraryStatus().kind !== "ready") return;
+        setShortcutsOpen(false);
+        closeSettings();
+        createDocument();
+        requestEditorFocus();
+      },
+      save: () => void retryLibrarySave(),
+      switchPane: () => {
+        if (view() !== "document" || !hasDocuments()) return;
+        if (switchPane()) requestPaneFocus();
+      },
+      closeSplit: () => {
+        if (view() !== "document") return;
+        if (closeSplit()) requestPaneFocus();
+      },
+    };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -127,42 +163,24 @@ export default function AppShell() {
         if (focusMode()) setFocusMode(false);
         return;
       }
-      const handled = handleGlobalShortcut(
-        event,
-        {
-          setLayout: setLayoutMode,
-          toggleSidebar,
-          toggleFocusMode,
-          toggleShortcuts,
-          toggleSettings: () => toggleSettings(),
-          focusSearch: () => {
-            setShortcutsOpen(false);
-            setFocusMode(false);
-            setSidebarOpen(true);
-            requestSearch();
-          },
-          createDocument: () => {
-            if (libraryStatus().kind !== "ready") return;
-            setShortcutsOpen(false);
-            closeSettings();
-            createDocument();
-            requestEditorFocus();
-          },
-        },
-        mac,
-      );
+      const handled = handleGlobalShortcut(event, handlers, mac);
       if (handled) {
         event.preventDefault();
         event.stopPropagation();
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
+    const stopCommands = desktopBridge()?.window.onCommand((command) => {
+      if (isGlobalShortcutId(command)) runGlobalShortcut(command, handlers);
+    });
 
     return () => {
       cancelRenderWarmup();
       stopPersistence();
+      stopDesktopSync();
       stopThemeWatch();
       window.removeEventListener("keydown", onKeyDown, true);
+      stopCommands?.();
     };
   });
 

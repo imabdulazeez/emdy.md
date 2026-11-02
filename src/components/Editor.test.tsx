@@ -490,3 +490,115 @@ describe("Editor", () => {
     expect(viewOf().state.doc.toString()).toBe(second.text);
   });
 });
+
+describe("Editor in a split pane", () => {
+  const [focusedDoc, backgroundDoc] = TEST_DOCUMENTS;
+
+  function hostFor(id: string) {
+    return screen.getByTestId(`pane-${id}`).querySelector<HTMLElement>(".cm-content")!;
+  }
+
+  function viewFor(id: string) {
+    return EditorView.findFromDOM(hostFor(id))!;
+  }
+
+  function mountPair(active: () => string) {
+    return render(() => (
+      <>
+        <div data-testid={`pane-${focusedDoc.id}`}>
+          <Editor documentId={focusedDoc.id} active={active() === focusedDoc.id} />
+        </div>
+        <div data-testid={`pane-${backgroundDoc.id}`}>
+          <Editor documentId={backgroundDoc.id} active={active() === backgroundDoc.id} />
+        </div>
+      </>
+    ));
+  }
+
+  it("shows each pane's own document", () => {
+    mountPair(() => focusedDoc.id);
+    expect(viewFor(focusedDoc.id).state.doc.toString()).toBe(focusedDoc.text);
+    expect(viewFor(backgroundDoc.id).state.doc.toString()).toBe(backgroundDoc.text);
+  });
+
+  it("publishes shared state only from the focused pane", async () => {
+    mountPair(() => focusedDoc.id);
+    const api = editorApi();
+    expect(api?.getText()).toBe(focusedDoc.text);
+    await waitFor(() => expect(outlineDocumentId()).toBe(focusedDoc.id));
+    const background = viewFor(backgroundDoc.id);
+    background.dispatch({ selection: { anchor: 5 } });
+    flush();
+    expect(cursor()).toEqual({ line: 1, column: 1 });
+    expect(documentPosition(backgroundDoc.id)).toMatchObject({ anchor: 5, head: 5 });
+    expect(editorApi()).toBe(api);
+  });
+
+  it("saves edits in the background pane to its own document", () => {
+    vi.useFakeTimers();
+    mountPair(() => focusedDoc.id);
+    viewFor(backgroundDoc.id).dispatch({ changes: { from: 0, insert: "Side " } });
+    vi.advanceTimersByTime(SNAPSHOT_DEBOUNCE_MS);
+    flush();
+    expect(findDocument(backgroundDoc.id)?.text).toBe(`Side ${backgroundDoc.text}`);
+    expect(findDocument(focusedDoc.id)?.text).toBe(focusedDoc.text);
+  });
+
+  it("takes over the shared state when its pane gains focus", async () => {
+    const [active, setActive] = createSignal(focusedDoc.id);
+    mountPair(active);
+    flush(() => setActive(backgroundDoc.id));
+    expect(editorApi()?.getText()).toBe(backgroundDoc.text);
+    await waitFor(() => expect(outlineDocumentId()).toBe(backgroundDoc.id));
+    viewFor(backgroundDoc.id).dispatch({ selection: { anchor: 0 } });
+    flush();
+    expect(cursor()).toEqual({ line: 1, column: 1 });
+  });
+
+  it("takes a focus request only in the focused pane", () => {
+    const [active, setActive] = createSignal(focusedDoc.id);
+    mountPair(active);
+    flush(() => setActive(backgroundDoc.id));
+    flush(() => requestEditorFocus());
+    expect(viewFor(backgroundDoc.id).hasFocus).toBe(true);
+    expect(viewFor(focusedDoc.id).hasFocus).toBe(false);
+    expect(editorFocusRequested()).toBe(false);
+  });
+
+  it("follows a replacement of the background document from disk", () => {
+    mountPair(() => focusedDoc.id);
+    flush(() => updateDocumentText(backgroundDoc.id, "changed elsewhere"));
+    expect(viewFor(backgroundDoc.id).state.doc.toString()).toBe("changed elsewhere");
+    expect(viewFor(focusedDoc.id).state.doc.toString()).toBe(focusedDoc.text);
+  });
+
+  it("leaves the focused pane's state alone when the background pane unmounts", async () => {
+    const [showBackground, setShowBackground] = createSignal(true);
+    render(() => (
+      <>
+        <div data-testid={`pane-${focusedDoc.id}`}>
+          <Editor documentId={focusedDoc.id} active />
+        </div>
+        {showBackground() && (
+          <div data-testid={`pane-${backgroundDoc.id}`}>
+            <Editor documentId={backgroundDoc.id} active={false} />
+          </div>
+        )}
+      </>
+    ));
+    await waitFor(() => expect(outlineDocumentId()).toBe(focusedDoc.id));
+    const api = editorApi();
+    flush(() => setShowBackground(false));
+    expect(editorApi()).toBe(api);
+    expect(outlineDocumentId()).toBe(focusedDoc.id);
+  });
+
+  it("records the background pane's reading line as it scrolls", async () => {
+    mountPair(() => focusedDoc.id);
+    flush(() => setViewportLine(0));
+    viewFor(backgroundDoc.id).scrollDOM.dispatchEvent(new Event("scroll"));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(documentPosition(backgroundDoc.id)?.line).toBeGreaterThan(0);
+    expect(viewportLine()).toBe(0);
+  });
+});

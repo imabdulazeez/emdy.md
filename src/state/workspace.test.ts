@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { flush } from "solid-js";
+import { isSplitRatio } from "~/lib/split-ratio";
 import { decodeStored } from "~/lib/storage/persisted";
 import {
   POSITION_WRITE_DELAY_MS,
@@ -7,18 +8,27 @@ import {
   documentPositions,
   forgetPosition,
   isDocumentPosition,
+  isFlag,
   isPinned,
   isPinnedList,
+  isSplitLayout,
   lastDocumentId,
+  otherFoldersCollapsed,
   pinDocument,
   pinnedDocumentIds,
   rememberDocument,
-  rememberSidebar,
   resetWorkspaceState,
   retainPins,
   retainPositions,
   savePosition,
-  sidebarPreference,
+  setOtherFoldersCollapsed,
+  peekSplitLayout,
+  sameSplitLayout,
+  setSplitLayout,
+  setSplitRatio,
+  splitLayout,
+  splitRatio,
+  SPLIT_RATIO_WRITE_DELAY_MS,
   unpinDocument,
 } from "./workspace";
 
@@ -33,13 +43,6 @@ describe("workspace state", () => {
     flush(() => rememberDocument("abc123"));
     expect(lastDocumentId()).toBe("abc123");
     expect(window.localStorage.getItem("emdy:workspace:last-document")).toBe('"abc123"');
-  });
-
-  it("remembers the sidebar state only once set", () => {
-    expect(sidebarPreference()).toBeNull();
-    flush(() => rememberSidebar(false));
-    expect(sidebarPreference()).toBe(false);
-    expect(window.localStorage.getItem("emdy:workspace:sidebar")).toBe("false");
   });
 
   it("validates document positions", () => {
@@ -142,19 +145,102 @@ describe("workspace state", () => {
     expect(decodeStored('["abc123"]', isPinnedList, [])).toEqual(["abc123"]);
   });
 
+  it("keeps other folders expanded until the user collapses them, and writes at once", () => {
+    expect(otherFoldersCollapsed()).toBe(false);
+    flush(() => setOtherFoldersCollapsed(true));
+    expect(otherFoldersCollapsed()).toBe(true);
+    expect(window.localStorage.getItem("emdy:workspace:other-folders-collapsed")).toBe("true");
+    flush(() => setOtherFoldersCollapsed(false));
+    expect(window.localStorage.getItem("emdy:workspace:other-folders-collapsed")).toBe("false");
+  });
+
+  it("falls back to expanded other folders when the stored value is invalid", () => {
+    expect(decodeStored('"yes"', isFlag, false)).toBe(false);
+    expect(decodeStored("not json", isFlag, false)).toBe(false);
+    expect(decodeStored("true", isFlag, false)).toBe(true);
+  });
+
   it("resets to defaults and clears storage", () => {
     flush(() => {
       rememberDocument("abc123");
-      rememberSidebar(true);
       savePosition("abc123", { line: 4 });
       pinDocument("abc123");
+      setOtherFoldersCollapsed(true);
     });
     flush(() => resetWorkspaceState());
     expect(lastDocumentId()).toBeNull();
-    expect(sidebarPreference()).toBeNull();
     expect(documentPositions()).toEqual({});
     expect(pinnedDocumentIds()).toEqual([]);
     expect(window.localStorage.getItem("emdy:workspace:pinned")).toBeNull();
     expect(window.localStorage.getItem("emdy:workspace:last-document")).toBeNull();
+    expect(otherFoldersCollapsed()).toBe(false);
+    expect(window.localStorage.getItem("emdy:workspace:other-folders-collapsed")).toBeNull();
+  });
+
+  it("starts without a split and validates stored layouts", () => {
+    expect(splitLayout()).toBeNull();
+    expect(isSplitLayout(null)).toBe(true);
+    expect(isSplitLayout({ other: "abc123", side: "left" })).toBe(true);
+    expect(isSplitLayout({ other: "abc123", side: "right" })).toBe(true);
+    expect(isSplitLayout({ other: "abc123", side: "top" })).toBe(false);
+    expect(isSplitLayout({ other: "Not an id", side: "left" })).toBe(false);
+    expect(isSplitLayout({ other: "abc123" })).toBe(false);
+    expect(isSplitLayout({ other: "abc123", side: "left", extra: 1 })).toBe(false);
+    expect(isSplitLayout(["abc123", "left"])).toBe(false);
+    expect(isSplitLayout("abc123")).toBe(false);
+  });
+
+  it("compares layouts by value", () => {
+    expect(sameSplitLayout(null, null)).toBe(true);
+    expect(sameSplitLayout({ other: "abc123", side: "left" }, null)).toBe(false);
+    expect(
+      sameSplitLayout({ other: "abc123", side: "left" }, { other: "abc123", side: "left" }),
+    ).toBe(true);
+    expect(
+      sameSplitLayout({ other: "abc123", side: "left" }, { other: "abc123", side: "right" }),
+    ).toBe(false);
+  });
+
+  it("writes the split layout and clears it", () => {
+    flush(() => setSplitLayout({ other: "abc123", side: "right" }));
+    expect(splitLayout()).toEqual({ other: "abc123", side: "right" });
+    expect(peekSplitLayout()).toEqual({ other: "abc123", side: "right" });
+    expect(JSON.parse(window.localStorage.getItem("emdy:workspace:split")!)).toEqual({
+      other: "abc123",
+      side: "right",
+    });
+    flush(() => setSplitLayout({ other: "Not an id", side: "left" }));
+    expect(splitLayout()).toEqual({ other: "abc123", side: "right" });
+    flush(() => setSplitLayout(null));
+    expect(splitLayout()).toBeNull();
+    expect(window.localStorage.getItem("emdy:workspace:split")).toBe("null");
+  });
+
+  it("falls back to no split when the stored layout is malformed", () => {
+    expect(decodeStored('{"other":"abc123","side":"middle"}', isSplitLayout, null)).toBeNull();
+    expect(decodeStored("not json", isSplitLayout, null)).toBeNull();
+    expect(decodeStored('{"other":"abc123","side":"left"}', isSplitLayout, null)).toEqual({
+      other: "abc123",
+      side: "left",
+    });
+  });
+
+  it("starts the split at an even share and writes a new one after a delay", () => {
+    vi.useFakeTimers();
+    expect(splitRatio()).toBe(0.5);
+    flush(() => setSplitRatio(0.35));
+    expect(splitRatio()).toBe(0.35);
+    expect(window.localStorage.getItem("emdy:workspace:split-ratio")).toBeNull();
+    vi.advanceTimersByTime(SPLIT_RATIO_WRITE_DELAY_MS);
+    expect(window.localStorage.getItem("emdy:workspace:split-ratio")).toBe("0.35");
+  });
+
+  it("refuses split shares outside the bounds", () => {
+    flush(() => setSplitRatio(0.95));
+    flush(() => setSplitRatio(Number.NaN));
+    expect(splitRatio()).toBe(0.5);
+    expect(decodeStored("0.9", isSplitRatio, 0.5)).toBe(0.5);
+    expect(decodeStored('"0.4"', isSplitRatio, 0.5)).toBe(0.5);
+    expect(decodeStored("0.4", isSplitRatio, 0.5)).toBe(0.4);
   });
 });

@@ -14,7 +14,7 @@ import { activeDocumentId, findDocument, openDocument, title } from "./document"
 import { editorApi } from "./editor-api";
 import { outline, outlineDocumentId } from "./stats";
 import { anchorViewportLine, readingViewportLine } from "./viewport";
-import { documentPosition } from "./workspace";
+import { documentPosition, splitLayout } from "./workspace";
 
 export type NavigationWindow = Pick<
   Window,
@@ -172,7 +172,12 @@ export function startHistorySync(win: NavigationWindow = window): void {
   createEffect(
     () =>
       ready() && view() === "document"
-        ? { id: activeDocumentId(), title: title(), heading: locationHeading() }
+        ? {
+            id: activeDocumentId(),
+            title: title(),
+            heading: locationHeading(),
+            beside: splitLayout()?.other ?? null,
+          }
         : null,
     (next, previous) => {
       if (!next) return;
@@ -180,7 +185,8 @@ export function startHistorySync(win: NavigationWindow = window): void {
         ? documentHref(next, { search: win.location.search, heading: next.heading })
         : `/${win.location.search}`;
       if (locationHref(win) === href) return;
-      if (previous && previous.id === next.id) win.history.replaceState(null, "", href);
+      const samePlace = previous && (previous.id === next.id || previous.id === next.beside);
+      if (samePlace) win.history.replaceState(null, "", href);
       else win.history.pushState(null, "", href);
     },
   );

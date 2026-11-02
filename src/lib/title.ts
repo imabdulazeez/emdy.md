@@ -1,5 +1,5 @@
 export const UNTITLED = "Untitled";
-export const APP_NAME = "emdy.md";
+export const APP_NAME = "emdy";
 export const HOME_TITLE = `${APP_NAME} · Private Markdown editor that runs in your browser`;
 export const MAX_DERIVED_TITLE_LENGTH = 60;
 

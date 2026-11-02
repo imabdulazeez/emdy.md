@@ -2,7 +2,12 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEditorExtensions } from "./extensions";
-import { COPY_FEEDBACK_MS, fencedCodeContent, livePreview } from "./live-preview";
+import {
+  COPY_FEEDBACK_MS,
+  blockquoteContent,
+  fencedCodeContent,
+  livePreview,
+} from "./live-preview";
 
 const DOC = "Intro\n\n```ts\nconst a = 1;\nlet b;\n```\n\nAfter";
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
@@ -134,6 +139,84 @@ describe("livePreview code blocks", () => {
     const before = editor.state.selection.main.head;
     copy.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     expect(editor.state.selection.main.head).toBe(before);
+  });
+});
+
+const QUOTE = "Intro\n\n> First *line*\n> second line\n>\n> > nested\n\nAfter";
+
+describe("blockquoteContent", () => {
+  it("returns the outermost quote without its own markers", () => {
+    const state = EditorState.create({ doc: QUOTE, extensions: createEditorExtensions() });
+    const expected = "First *line*\nsecond line\n\n> nested";
+    expect(blockquoteContent(state, QUOTE.indexOf(">"))).toBe(expected);
+    expect(blockquoteContent(state, QUOTE.indexOf("nested"))).toBe(expected);
+  });
+
+  it("keeps lazy continuation lines and strips a quote inside a list item", () => {
+    const lazy = EditorState.create({
+      doc: "> one\ntwo",
+      extensions: createEditorExtensions(),
+    });
+    expect(blockquoteContent(lazy, 0)).toBe("one\ntwo");
+    const listed = EditorState.create({
+      doc: "- > quoted\n  > more",
+      extensions: createEditorExtensions(),
+    });
+    expect(blockquoteContent(listed, 4)).toBe("quoted\nmore");
+  });
+
+  it("returns an empty string outside a quote", () => {
+    const state = EditorState.create({ doc: QUOTE, extensions: createEditorExtensions() });
+    expect(blockquoteContent(state, 0)).toBe("");
+  });
+});
+
+describe("livePreview blockquotes", () => {
+  it("adds one copy button to the first line of each top-level quote", () => {
+    const editor = mount(`${QUOTE}\n\n> second quote`);
+    const buttons = editor.contentDOM.querySelectorAll<HTMLButtonElement>(".cm-live-quote-copy");
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0]).toHaveAttribute("aria-label", "Copy quote");
+    expect(buttons[0].closest(".cm-line")).toHaveClass("cm-live-quote-start");
+    expect(buttons[0].closest(".cm-line")).toHaveTextContent("First line");
+    expect(buttons[1].closest(".cm-line")).toHaveTextContent("second quote");
+  });
+
+  it("copies the quote text and shows transient feedback", async () => {
+    vi.useFakeTimers();
+    const writeText = stubClipboard();
+    const editor = mount(QUOTE);
+    const copy = editor.contentDOM.querySelector<HTMLButtonElement>(".cm-live-quote-copy")!;
+    copy.click();
+    expect(writeText).toHaveBeenCalledWith("First *line*\nsecond line\n\n> nested");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(copy).toHaveAttribute("aria-label", "Copied");
+    expect(copy.dataset.copied).toBe("true");
+    vi.advanceTimersByTime(COPY_FEEDBACK_MS);
+    expect(copy).toHaveAttribute("aria-label", "Copy quote");
+    expect(copy.dataset.copied).toBeUndefined();
+  });
+
+  it("does not claim success when the clipboard write fails", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+      configurable: true,
+    });
+    const editor = mount(QUOTE);
+    const copy = editor.contentDOM.querySelector<HTMLButtonElement>(".cm-live-quote-copy")!;
+    copy.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(copy).toHaveAttribute("aria-label", "Copy quote");
+  });
+
+  it("does not let the copy button move the cursor or change the document", () => {
+    const editor = mount(QUOTE);
+    const copy = editor.contentDOM.querySelector<HTMLButtonElement>(".cm-live-quote-copy")!;
+    const before = editor.state.selection.main.head;
+    copy.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    expect(editor.state.selection.main.head).toBe(before);
+    expect(editor.state.doc.toString()).toBe(QUOTE);
   });
 });
 

@@ -7,6 +7,7 @@ const NAMES: IconName[] = [
   "moon",
   "monitor",
   "panel-left",
+  "split",
   "editor",
   "preview",
   "focus",

@@ -394,3 +394,51 @@ test("read-only preview renders code blocks like the editable preview, with a la
   await expect(reader.locator(".cm-line").filter({ hasText: "typed" })).toHaveCount(0);
   await expect(reader.getByText("```json")).toHaveCount(0);
 });
+
+test("blockquotes carry a copy button in the top-right corner that copies the quote without its markers", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await seedLibrary(page);
+  await page.getByRole("button", { name: "New document", exact: true }).click();
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  const quote =
+    "1,154 records (1.4%) contain figures that contradict each other, mostly parent payout ratios that don't equal dividend divided by earnings (1,017). Please review these records for mis-scaled, mis-signed or misplaced figures.";
+  await editor.fill(`Intro\n\n> ${quote}\n> Second line.\n\nAfter`);
+  await editor.press("ControlOrMeta+Home");
+  await page.keyboard.press("ControlOrMeta+2");
+
+  const copy = editor.getByRole("button", { name: "Copy quote", exact: true });
+  await expect(copy).toBeVisible();
+  const line = editor.locator(".cm-live-quote-start");
+  const lineBox = (await line.boundingBox())!;
+  const buttonBox = (await copy.boundingBox())!;
+  expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(lineBox.x + lineBox.width + 1);
+  expect(lineBox.x + lineBox.width - (buttonBox.x + buttonBox.width)).toBeLessThanOrEqual(8);
+  expect(buttonBox.y).toBeGreaterThanOrEqual(lineBox.y - 1);
+  expect(buttonBox.y - lineBox.y).toBeLessThanOrEqual(8);
+  const textRight = await line.evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let right = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.parentElement?.closest("button")) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) right = Math.max(right, rect.right);
+    }
+    return right;
+  });
+  expect(textRight).toBeLessThanOrEqual(buttonBox.x + 1);
+
+  await copy.click();
+  await expect(editor.getByRole("button", { name: "Copied", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${quote}\nSecond line.`);
+  await expect(line).not.toContainText(">");
+  await expect(editor.getByRole("button", { name: "Copy quote", exact: true })).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+3");
+  const reader = page.getByRole("document", { name: "Preview", exact: true });
+  await expect(reader.getByRole("button", { name: "Copy quote", exact: true })).toBeVisible();
+});

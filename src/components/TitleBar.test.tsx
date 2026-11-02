@@ -20,7 +20,24 @@ afterEach(() => {
   resetThemeState();
   resetUiState();
   resetEditorApiState();
+  vi.restoreAllMocks();
 });
+
+function narrowViewport() {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string) =>
+      ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}
 
 function mount() {
   return render(() => (
@@ -39,10 +56,10 @@ describe("TitleBar", () => {
     expect(title.compareDocumentPosition(edited) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows the sidebar trigger, title, mode toggle, formatting, and focus control", () => {
+  it("shows the title, mode toggle, formatting, and focus control", () => {
     mount();
     expect(screen.getByRole("banner", { name: "Toolbar" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sidebar/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Document title/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View: Raw Markdown" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Text formatting" })).toBeInTheDocument();
@@ -51,11 +68,17 @@ describe("TitleBar", () => {
     expect(screen.queryByRole("group", { name: "Theme" })).toBeNull();
   });
 
+  it("lets the desktop window be dragged by the toolbar", () => {
+    mount();
+    expect(screen.getByRole("banner", { name: "Toolbar" })).toHaveAttribute("data-window-drag");
+  });
+
   it("advertises the registered shortcuts for the sidebar and focus mode", () => {
     const mac = isMacPlatform();
+    narrowViewport();
     mount();
     const cases = [
-      ["Hide sidebar", "Toggle sidebar", "toggle-sidebar"],
+      ["Show sidebar", "Toggle sidebar", "toggle-sidebar"],
       ["Enter focus mode", "Focus mode", "toggle-focus"],
     ] as const;
     for (const [name, label, id] of cases) {
@@ -139,15 +162,15 @@ describe("TitleBar", () => {
     expect(runCommand).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles the app sidebar", async () => {
+  it("opens the sidebar drawer on narrow screens", async () => {
     const user = userEvent.setup();
+    narrowViewport();
     mount();
-    await user.click(screen.getByRole("button", { name: "Hide sidebar" }));
-    expect(sidebarOpen()).toBe(false);
-    expect(screen.getByRole("button", { name: "Show sidebar" })).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
+    const trigger = screen.getByRole("button", { name: "Show sidebar" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(trigger);
+    expect(sidebarOpen()).toBe(true);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
   });
 
   it("enters focus mode", async () => {

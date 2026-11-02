@@ -2,7 +2,9 @@ import { render, screen, waitFor, within } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { flush } from "solid-js";
-import { createMemoryDirectory } from "~/lib/storage/directory";
+import { DESKTOP_BRIDGE_KEY } from "~/lib/desktop/bridge";
+import { createMemoryBridge } from "~/lib/desktop/memory-bridge";
+import { createMemoryDirectory, type MemoryDirectory } from "~/lib/storage/directory";
 import { seedDirectory } from "~/lib/storage/fixtures";
 import { TEST_DOCUMENTS } from "~/test-documents";
 import { resetCursorState } from "~/state/cursor";
@@ -41,8 +43,14 @@ import {
   shortcutsOpen,
   sidebarOpen,
 } from "~/state/ui";
-import { SHORTCUTS, ariaKeyShortcuts, formatShortcut, isMacPlatform } from "~/lib/shortcuts";
-import { resetWorkspaceState, sidebarPreference } from "~/state/workspace";
+import {
+  SHORTCUTS,
+  ariaKeyShortcuts,
+  formatShortcut,
+  isMacPlatform,
+  keysFor,
+} from "~/lib/shortcuts";
+import { resetWorkspaceState, splitLayout } from "~/state/workspace";
 
 import { getRenderClient } from "~/lib/preview/render-client";
 vi.mock("~/lib/preview/render-client", () => ({
@@ -60,11 +68,14 @@ const location = () =>
 const documentLocation = () => location().replace(/(#\/d\/[^/]+)\/[^/]+$/, "$1");
 
 let restoreDirectory: (() => void) | undefined;
+let libraryDirectory: MemoryDirectory;
+const host = globalThis as Record<string, unknown>;
 
 async function boot(seed = true) {
   restoreDirectory?.();
   resetLibraryState();
   const directory = createMemoryDirectory();
+  libraryDirectory = directory;
   if (seed) await seedDirectory(directory, TEST_DOCUMENTS);
   restoreDirectory = useLibraryDirectory(async () => directory);
   await startLibrary();
@@ -74,6 +85,7 @@ async function boot(seed = true) {
 beforeEach(() => boot());
 
 afterEach(() => {
+  delete host[DESKTOP_BRIDGE_KEY];
   restoreDirectory?.();
   restoreDirectory = undefined;
   resetLibraryState();
@@ -90,7 +102,24 @@ afterEach(() => {
   delete document.documentElement.dataset.theme;
   document.documentElement.removeAttribute("style");
   window.history.replaceState(null, "", "/");
+  vi.restoreAllMocks();
 });
+
+function narrowViewport() {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query: string) =>
+      ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}
 
 async function mount() {
   flush(() => setDocText("# Heading\n\nbody text"));
@@ -261,11 +290,9 @@ describe("AppShell", () => {
 
   it("renders chrome and the editor by default", async () => {
     await mount();
-    expect(screen.getByText("emdy.md")).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: "Sidebar" })).toHaveAttribute(
-      "data-state",
-      "expanded",
-    );
+    expect(screen.getByText("emdy")).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sidebar/ })).toBeNull();
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Outline" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Document" })).toContainElement(
@@ -346,49 +373,93 @@ describe("AppShell", () => {
     );
   });
 
-  it("toggles the sidebar with Mod-\\", async () => {
+  it("keeps the desktop sidebar in place when Mod-\\ is pressed", async () => {
     const user = userEvent.setup();
     await mount();
-    expect(sidebarOpen()).toBe(true);
     await user.keyboard("{Control>}\\{/Control}");
     expect(sidebarOpen()).toBe(false);
-    expect(screen.getByRole("complementary", { name: "Sidebar" })).toHaveAttribute(
-      "data-state",
-      "collapsed",
-    );
-    expect(screen.getByRole("navigation", { name: "Outline" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Sidebar" })).toBeNull();
+  });
+
+  it("opens and shuts the sidebar drawer with Mod-\\ on narrow screens", async () => {
+    narrowViewport();
+    const user = userEvent.setup();
+    await mount();
+    expect(screen.queryByRole("complementary", { name: "Sidebar" })).toBeNull();
     await user.keyboard("{Control>}\\{/Control}");
     expect(sidebarOpen()).toBe(true);
+    expect(await screen.findByRole("dialog", { name: "Sidebar" })).toBeInTheDocument();
+    await user.keyboard("{Control>}\\{/Control}");
+    expect(sidebarOpen()).toBe(false);
+    expect(screen.queryByRole("dialog", { name: "Sidebar" })).toBeNull();
+  });
+
+  it("opens split view from the sidebar and switches and closes it from the keyboard", async () => {
+    const user = userEvent.setup();
+    await mount();
+    const [first, second] = documents();
+    const sidebar = within(screen.getByRole("list", { name: "Documents" }));
+    await user.keyboard("{Control>}");
+    await user.click(sidebar.getByRole("button", { name: second.title }));
+    await user.keyboard("{/Control}");
+    expect(splitLayout()).toEqual({ other: first.id, side: "right" });
+    const editors = await screen.findAllByRole("textbox", { name: "Markdown editor" });
+    expect(editors).toHaveLength(2);
+    expect(screen.getByRole("main", { name: "Document" })).toHaveAttribute("data-split", "true");
+    const left = screen.getByRole("region", { name: `${first.title} pane` });
+    const right = screen.getByRole("region", { name: `${second.title} pane` });
+    await waitFor(() => expect(within(right).getByRole("textbox")).toHaveFocus());
+    expect(document.title).toContain(second.title);
+
+    await user.keyboard("{Control>}{Alt>}s{/Alt}{/Control}");
+    expect(activeDocumentId()).toBe(first.id);
+    await waitFor(() => expect(within(left).getByRole("textbox")).toHaveFocus());
+    expect(left).toHaveAttribute("data-pane-active", "true");
+    expect(document.title).toContain(first.title);
+
+    await user.keyboard("{Control>}{Alt>}{Shift>}S{/Shift}{/Alt}{/Control}");
+    expect(splitLayout()).toBeNull();
+    expect(activeDocumentId()).toBe(first.id);
+    expect(screen.getAllByRole("textbox", { name: "Markdown editor" })).toHaveLength(1);
+    expect(screen.getByRole("main", { name: "Document" })).not.toHaveAttribute("data-split");
+  });
+
+  it("ignores the split shortcuts without a split", async () => {
+    const user = userEvent.setup();
+    await mount();
+    const active = activeDocumentId();
+    await user.keyboard("{Control>}{Alt>}s{/Alt}{/Control}");
+    await user.keyboard("{Control>}{Alt>}{Shift>}S{/Shift}{/Alt}{/Control}");
+    expect(activeDocumentId()).toBe(active);
+    expect(splitLayout()).toBeNull();
   });
 
   it("names the browser tab after the active document", async () => {
     const user = userEvent.setup();
     await mount();
-    expect(document.title).toBe(`${title()} · emdy.md`);
+    expect(document.title).toBe(`${title()} · emdy`);
     flush(() => setTitle("Project Kickoff Notes"));
-    expect(document.title).toBe("Project Kickoff Notes · emdy.md");
+    expect(document.title).toBe("Project Kickoff Notes · emdy");
     const other = documents().find((doc) => doc.id !== activeDocumentId())!;
     await user.click(screen.getByRole("button", { name: other.title }));
-    expect(document.title).toBe(`${other.title} · emdy.md`);
+    expect(document.title).toBe(`${other.title} · emdy`);
     await user.keyboard("{Control>},{/Control}");
-    expect(document.title).toBe("Settings · emdy.md");
+    expect(document.title).toBe("Settings · emdy");
     await user.keyboard("{Escape}");
-    expect(document.title).toBe(`${other.title} · emdy.md`);
+    expect(document.title).toBe(`${other.title} · emdy`);
     for (const { id } of documents()) flush(() => deleteDocument(id));
-    expect(document.title).toBe("emdy.md · Private Markdown editor that runs in your browser");
+    expect(document.title).toBe("emdy · Private Markdown editor that runs in your browser");
   });
 
-  it("jumps to document search with Mod-P from focus mode and a collapsed sidebar", async () => {
+  it("jumps to document search with Mod-P from focus mode", async () => {
     const user = userEvent.setup();
     await mount();
-    flush(() => {
-      setSidebarOpen(false);
-      setFocusMode(true);
-    });
+    flush(() => setFocusMode(true));
     expect(screen.queryByRole("searchbox", { name: "Search documents" })).toBeNull();
     await user.keyboard("{Control>}p{/Control}");
     expect(focusMode()).toBe(false);
-    expect(sidebarOpen()).toBe(true);
+    expect(sidebarOpen()).toBe(false);
     const search = await screen.findByRole("searchbox", { name: "Search documents" });
     await waitFor(() => expect(search).toHaveFocus());
   });
@@ -408,6 +479,61 @@ describe("AppShell", () => {
     expect(activeDocumentId()).toBe(documents().at(-1)!.id);
     const editor = await screen.findByRole("textbox", { name: "Markdown editor" });
     await waitFor(() => expect(editor).toHaveFocus());
+  });
+
+  it("saves straight away with Mod-S instead of waiting for the debounce", async () => {
+    const user = userEvent.setup();
+    await mount();
+    const saved = () =>
+      Object.values(libraryDirectory.files()).some((text) => text.includes("Saved on demand"));
+    flush(() => setDocText("# Heading\n\nSaved on demand"));
+    expect(saved()).toBe(false);
+    const started = Date.now();
+    await user.keyboard("{Control>}s{/Control}");
+    await waitFor(() => expect(saved()).toBe(true), { timeout: 400 });
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it("runs commands sent from the desktop menu", async () => {
+    const bridge = createMemoryBridge(null);
+    host[DESKTOP_BRIDGE_KEY] = bridge;
+    const result = await mount();
+    const before = documents().length;
+
+    flush(() => bridge.sendCommand("layout-reader"));
+    flush();
+    expect(layoutMode()).toBe("reader");
+    flush(() => bridge.sendCommand("shortcuts"));
+    flush();
+    expect(shortcutsOpen()).toBe(true);
+    flush(() => bridge.sendCommand("new-document"));
+    flush();
+    expect(documents()).toHaveLength(before + 1);
+    expect(shortcutsOpen()).toBe(false);
+    flush(() => bridge.sendCommand("settings"));
+    flush();
+    expect(view()).toBe("settings");
+
+    flush(() => bridge.sendCommand("bold"));
+    flush(() => bridge.sendCommand("not-a-command"));
+    flush();
+    expect(documents()).toHaveLength(before + 1);
+
+    result.unmount();
+    flush(() => bridge.sendCommand("new-document"));
+    flush();
+    expect(documents()).toHaveLength(before + 1);
+  });
+
+  it("creates a document with Mod-N in the desktop app", async () => {
+    host[DESKTOP_BRIDGE_KEY] = createMemoryBridge(null);
+    const user = userEvent.setup();
+    await mount();
+    const before = documents().length;
+    await user.keyboard("{Control>}{Alt>}n{/Alt}{/Control}");
+    expect(documents()).toHaveLength(before);
+    await user.keyboard("{Control>}n{/Control}");
+    expect(documents()).toHaveLength(before + 1);
   });
 
   it("creates the first document with Mod-Alt-N from the welcome sheet", async () => {
@@ -438,7 +564,7 @@ describe("AppShell", () => {
     await mount();
     await user.keyboard("{Control>}{Shift>}F{/Shift}{/Control}");
     expect(focusMode()).toBe(true);
-    expect(screen.queryByText("emdy.md")).toBeNull();
+    expect(screen.queryByText("emdy")).toBeNull();
     expect(screen.queryByRole("complementary", { name: "Sidebar" })).toBeNull();
     expect(screen.queryByRole("navigation", { name: "Outline" })).toBeNull();
     expect(screen.queryByTestId("status-words")).toBeNull();
@@ -447,7 +573,7 @@ describe("AppShell", () => {
     await user.click(screen.getByRole("button", { name: "Exit focus mode" }));
     expect(focusMode()).toBe(false);
     expect(screen.queryByRole("button", { name: "Exit focus mode" })).toBeNull();
-    expect(screen.getByText("emdy.md")).toBeInTheDocument();
+    expect(screen.getByText("emdy")).toBeInTheDocument();
     await user.keyboard("{Control>}{Shift>}F{/Shift}{/Control}");
     expect(focusMode()).toBe(true);
     await user.keyboard("{Escape}");
@@ -484,8 +610,8 @@ describe("AppShell", () => {
     await mount();
     const registered = new Map(
       SHORTCUTS.map((shortcut) => [
-        ariaKeyShortcuts(shortcut.keys, mac),
-        formatShortcut(shortcut.keys, mac),
+        ariaKeyShortcuts(keysFor(shortcut), mac),
+        formatShortcut(keysFor(shortcut), mac),
       ]),
     );
     const hints = new Set(registered.values());
@@ -620,19 +746,5 @@ describe("AppShell", () => {
     expect(themeDraft()).toBeNull();
     expect(root.dataset.theme).toBe("light");
     expect(root.style.getPropertyValue("--color-canvas")).toBe(DEFAULT_THEME.light.canvas);
-  });
-
-  it("renders a closed sidebar collapsed from the first render and keeps it closed", async () => {
-    flush(() => setSidebarOpen(false));
-    expect(sidebarPreference()).toBe(false);
-    render(() => <AppShell />);
-    const sidebar = screen.getByRole("complementary", { name: "Sidebar" });
-    expect(sidebar).toHaveAttribute("data-state", "collapsed");
-    expect(sidebar).toHaveAttribute("data-collapsible", "icon");
-    expect(screen.getByRole("button", { name: "Show sidebar" })).toBeInTheDocument();
-    await screen.findByRole("textbox", { name: "Markdown editor" });
-    flush();
-    expect(sidebarOpen()).toBe(false);
-    expect(sidebar).toHaveAttribute("data-state", "collapsed");
   });
 });

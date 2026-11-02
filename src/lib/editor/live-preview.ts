@@ -11,6 +11,7 @@ import {
 import { COPY_FEEDBACK_MS, copyText } from "~/lib/clipboard";
 import { fenceLabel } from "./fence-info";
 import { ImageWidget, readImage } from "./image-widget";
+import { isBareUrl } from "./link-destination";
 import { liveTables } from "./table-widget";
 
 export { COPY_FEEDBACK_MS };
@@ -68,6 +69,24 @@ export function fencedCodeContent(state: EditorState, pos: number): string {
   return text ? state.sliceDoc(text.from, text.to) : "";
 }
 
+/** Text of the outermost blockquote that contains `pos`, without its own `>` markers. */
+export function blockquoteContent(state: EditorState, pos: number): string {
+  const inner = syntaxTree(state).resolveInner(pos, 1);
+  let quote: { from: number; to: number } | null = null;
+  for (let node: typeof inner | null = inner; node; node = node.parent) {
+    if (node.name === "Blockquote") quote = node;
+  }
+  if (!quote) return "";
+  const lines: string[] = [];
+  for (let position = quote.from; position <= quote.to;) {
+    const line = state.doc.lineAt(position);
+    const text = state.sliceDoc(Math.max(line.from, quote.from), Math.min(line.to, quote.to));
+    lines.push(text.replace(/^[ \t]*> ?/, ""));
+    position = line.to + 1;
+  }
+  return lines.join("\n").trim();
+}
+
 class TextWidget extends WidgetType {
   constructor(
     readonly text: string,
@@ -93,6 +112,47 @@ class TextWidget extends WidgetType {
 }
 
 const copyTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+function copyButton(className: string, label: string, read: () => string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button.append(iconElement(COPY_ICON));
+  button.addEventListener("mousedown", (event) => event.preventDefault());
+  button.addEventListener("click", () => {
+    void copyText(read()).then((copied) => {
+      if (copied && button.isConnected) showCopied(button, label);
+    });
+  });
+  return button;
+}
+
+function showCopied(button: HTMLButtonElement, label: string): void {
+  const pending = copyTimers.get(button);
+  if (pending) clearTimeout(pending);
+  button.replaceChildren(iconElement(CHECK_ICON));
+  button.setAttribute("aria-label", "Copied");
+  button.title = "Copied";
+  button.dataset.copied = "true";
+  copyTimers.set(
+    button,
+    setTimeout(() => {
+      copyTimers.delete(button);
+      button.replaceChildren(iconElement(COPY_ICON));
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      delete button.dataset.copied;
+    }, COPY_FEEDBACK_MS),
+  );
+}
+
+function clearCopyTimer(dom: HTMLElement, selector: string): void {
+  const button = dom.matches(selector) ? dom : dom.querySelector<HTMLElement>(selector);
+  const pending = button && copyTimers.get(button);
+  if (pending) clearTimeout(pending);
+}
 
 /**
  * Header row of a fenced code block: the language (or filename) on the left
@@ -121,42 +181,13 @@ class CodeHeaderWidget extends WidgetType {
     actions.setAttribute("role", "toolbar");
     actions.setAttribute("aria-label", "Code block actions");
 
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "cm-live-code-action";
-    copy.setAttribute("aria-label", "Copy code");
-    copy.title = "Copy code";
-    copy.append(iconElement(COPY_ICON));
-    copy.addEventListener("mousedown", (event) => event.preventDefault());
-    copy.addEventListener("click", () => {
-      const code = fencedCodeContent(view.state, view.posAtDOM(header));
-      void copyText(code).then((copied) => {
-        if (copied && copy.isConnected) this.showCopied(copy);
-      });
-    });
-
-    actions.append(copy);
+    actions.append(
+      copyButton("cm-live-code-action", "Copy code", () =>
+        fencedCodeContent(view.state, view.posAtDOM(header)),
+      ),
+    );
     header.append(label, actions);
     return header;
-  }
-
-  private showCopied(button: HTMLButtonElement): void {
-    const pending = copyTimers.get(button);
-    if (pending) clearTimeout(pending);
-    button.replaceChildren(iconElement(CHECK_ICON));
-    button.setAttribute("aria-label", "Copied");
-    button.title = "Copied";
-    button.dataset.copied = "true";
-    copyTimers.set(
-      button,
-      setTimeout(() => {
-        copyTimers.delete(button);
-        button.replaceChildren(iconElement(COPY_ICON));
-        button.setAttribute("aria-label", "Copy code");
-        button.title = "Copy code";
-        delete button.dataset.copied;
-      }, COPY_FEEDBACK_MS),
-    );
   }
 
   ignoreEvent(event: Event): boolean {
@@ -164,9 +195,28 @@ class CodeHeaderWidget extends WidgetType {
   }
 
   destroy(dom: HTMLElement): void {
-    const button = dom.querySelector<HTMLButtonElement>(".cm-live-code-action");
-    const pending = button && copyTimers.get(button);
-    if (pending) clearTimeout(pending);
+    clearCopyTimer(dom, ".cm-live-code-action");
+  }
+}
+
+class QuoteCopyWidget extends WidgetType {
+  eq(): boolean {
+    return true;
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const button = copyButton("cm-live-quote-copy", "Copy quote", () =>
+      blockquoteContent(view.state, view.posAtDOM(button)),
+    );
+    return button;
+  }
+
+  ignoreEvent(): boolean {
+    return true;
+  }
+
+  destroy(dom: HTMLElement): void {
+    clearCopyTimer(dom, ".cm-live-quote-copy");
   }
 }
 
@@ -308,6 +358,13 @@ function buildDecorations(view: EditorView): {
           }
           addLineClass(from, "cm-live-quote-start");
           addLineClass(lastLine.from, "cm-live-quote-end");
+          let nested = false;
+          for (let up = node.node.parent; up; up = up.parent) {
+            if (up.name === "Blockquote") nested = true;
+          }
+          if (!nested && from >= visible.from) {
+            ranges.push(Decoration.widget({ widget: new QuoteCopyWidget(), side: -1 }).range(from));
+          }
         }
 
         if (name === "FencedCode" || name === "CodeBlock" || name === "Table") {
@@ -356,9 +413,9 @@ function buildDecorations(view: EditorView): {
           return false;
         }
 
-        const inlineClass = INLINE_CLASSES[name];
+        const inlineClass = isBareUrl(node.node) ? "cm-live-link" : INLINE_CLASSES[name];
         if (inlineClass && from < to) {
-          const link = state.readOnly && (name === "Link" || name === "Autolink");
+          const link = state.readOnly && inlineClass === "cm-live-link";
           ranges.push(
             (link ? READER_LINK : Decoration.mark({ class: inlineClass })).range(from, to),
           );

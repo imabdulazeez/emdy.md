@@ -7,7 +7,7 @@ import {
   type StateCommand,
 } from "@codemirror/state";
 import { EditorView, placeholder } from "@codemirror/view";
-import { createEffect, onSettled, untrack } from "solid-js";
+import { createEffect, createMemo, onSettled, untrack } from "solid-js";
 import { runWhenIdle } from "~/lib/debounce";
 import { createEditorExtensions } from "~/lib/editor/extensions";
 import { getActiveFormats } from "~/lib/editor/format-state";
@@ -25,13 +25,19 @@ import {
 } from "~/lib/editor/viewport";
 import { setCursor } from "~/state/cursor";
 import {
+  activeDocument,
   activeDocumentId,
-  activeRevision,
-  docText,
   documents,
+  EMPTY_DOCUMENT,
   saveDocumentText,
 } from "~/state/document";
-import { registerEditorApi } from "~/state/editor-api";
+import {
+  isFocusedEditor,
+  registerEditorApi,
+  registerLiveEditor,
+  releaseEditorApi,
+  type EditorApi,
+} from "~/state/editor-api";
 import { resetFormattingState, setActiveFormats } from "~/state/formatting";
 import { followLink, mentionSource } from "~/state/links";
 import { isEditable, isLivePreview, type LayoutMode } from "~/state/layout";
@@ -56,16 +62,27 @@ const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home
 
 export interface EditorProps {
   mode?: LayoutMode;
+  documentId?: string;
+  active?: boolean;
 }
 
 export default function SourceEditor(props: EditorProps) {
   let host: HTMLDivElement | undefined;
   let view: EditorView | undefined;
   let session: EditorSession | undefined;
+  let editorHandle: EditorApi | undefined;
   const copyMenu = createTableCopyMenu();
   const presentation = new Compartment();
   const gutter = new Compartment();
   const mode = () => props.mode ?? "editor";
+  const documentId = () => props.documentId ?? activeDocumentId();
+  const isActive = () => props.active ?? true;
+  const record = createMemo(() => {
+    if (props.documentId === undefined) return activeDocument();
+    const id = props.documentId;
+    return documents().find((doc) => doc.id === id) ?? EMPTY_DOCUMENT;
+  });
+  const recordRevision = createMemo(() => record().revision);
   const isPreview = () => isLivePreview(mode());
   const isReadOnly = () => !isEditable(mode());
   const writing = placeholder("Start writing…");
@@ -94,14 +111,15 @@ export default function SourceEditor(props: EditorProps) {
   const publishOutline = (attempt = 0) => {
     cancelOutline();
     cancelOutline = runWhenIdle(() => {
-      if (!view) return;
+      if (!view || !untrack(isActive)) return;
       const { entries, complete } = readOutline(view.state);
-      setOutline(entries, session?.documentId() ?? untrack(activeDocumentId));
+      setOutline(entries, session?.documentId() ?? untrack(documentId));
       if (!complete && attempt < OUTLINE_MAX_ATTEMPTS) publishOutline(attempt + 1);
     });
   };
 
   const publishSelection = (state: EditorState) => {
+    if (!untrack(isActive)) return;
     const head = state.selection.main.head;
     const line = state.doc.lineAt(head);
     setCursor({ line: line.number, column: head - line.from + 1 });
@@ -135,7 +153,7 @@ export default function SourceEditor(props: EditorProps) {
 
   const settleOnLine = (editor: EditorView, number: number, frames = REVEAL_SETTLE_FRAMES) => {
     requestAnimationFrame(() => {
-      if (view !== editor || anchoredLine() !== number) return;
+      if (view !== editor || !untrack(isActive) || anchoredLine() !== number) return;
       if (revealLine(editor, number)) anchorViewportLine(number);
       if (frames > 1) settleOnLine(editor, number, frames - 1);
     });
@@ -143,11 +161,12 @@ export default function SourceEditor(props: EditorProps) {
 
   let anchorFrame = 0;
   const keepAnchoredLine = (editor: EditorView) => {
-    if (anchorFrame || !anchoredLine()) return;
+    if (anchorFrame || !untrack(isActive) || !anchoredLine()) return;
     anchorFrame = requestAnimationFrame(() => {
       anchorFrame = 0;
       const number = anchoredLine();
-      if (view !== editor || !number || number > editor.state.doc.lines) return;
+      if (view !== editor || !untrack(isActive) || !number || number > editor.state.doc.lines)
+        return;
       if (revealLine(editor, number)) anchorViewportLine(number);
     });
   };
@@ -164,6 +183,7 @@ export default function SourceEditor(props: EditorProps) {
     if (saved.line <= 0) return;
     const number = Math.min(doc.lines, saved.line);
     revealLine(editor, number);
+    if (!untrack(isActive)) return;
     anchorViewportLine(number);
     settleOnLine(editor, number);
   };
@@ -220,12 +240,12 @@ export default function SourceEditor(props: EditorProps) {
 
   onSettled(() => {
     if (!host) return;
-    view = new EditorView({ state: createState(untrack(docText)), parent: host });
+    view = new EditorView({ state: createState(untrack(record).text), parent: host });
     const editor = view;
     const opened = createEditorSession({
       view: editor,
-      documentId: untrack(activeDocumentId),
-      revision: untrack(activeRevision),
+      documentId: untrack(documentId),
+      revision: untrack(record).revision,
       createState,
       save: saveDocumentText,
       saveDelayMs: SNAPSHOT_DEBOUNCE_MS,
@@ -238,14 +258,16 @@ export default function SourceEditor(props: EditorProps) {
     let frame = 0;
     const reportViewport = () => {
       frame = 0;
-      setViewportLine(topVisibleLine(editor));
+      const line = topVisibleLine(editor);
+      if (untrack(isActive)) setViewportLine(line);
+      else savePosition(opened.documentId(), { line });
     };
     const onScroll = () => {
       if (frame) return;
       frame = requestAnimationFrame(reportViewport);
     };
     const releaseAnchor = () => {
-      if (!anchoredLine()) return;
+      if (!untrack(isActive) || !anchoredLine()) return;
       anchorViewportLine(0);
       setViewportLine(topVisibleLine(editor));
     };
@@ -261,7 +283,7 @@ export default function SourceEditor(props: EditorProps) {
     editor.scrollDOM.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
 
-    registerEditorApi({
+    const api: EditorApi = {
       scrollToLine(line) {
         const doc = editor.state.doc;
         const target = doc.line(Math.min(doc.lines, Math.max(1, Math.round(line))));
@@ -289,10 +311,18 @@ export default function SourceEditor(props: EditorProps) {
           annotations: Transaction.addToHistory.of(false),
         });
       },
-    });
-    if (takeEditorFocusRequest()) editor.focus();
+    };
+    editorHandle = api;
+    const stopLive = registerLiveEditor(api, () => opened.documentId());
+    if (untrack(isActive)) {
+      registerEditorApi(api);
+      if (takeEditorFocusRequest()) editor.focus();
+    }
 
     return () => {
+      const focused = isFocusedEditor(api);
+      stopLive();
+      editorHandle = undefined;
       opened.dispose();
       cancelOutline();
       if (frame) cancelAnimationFrame(frame);
@@ -302,19 +332,37 @@ export default function SourceEditor(props: EditorProps) {
       editor.scrollDOM.removeEventListener("touchstart", releaseAnchor);
       editor.scrollDOM.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
-      resetViewportState();
-      registerEditorApi(null);
-      resetFormattingState();
-      setOutline([]);
+      if (focused) {
+        resetViewportState();
+        releaseEditorApi(api);
+        resetFormattingState();
+        setOutline([]);
+      }
       editor.destroy();
       session = undefined;
       view = undefined;
     };
   });
 
-  createEffect(editorFocusRequested, (requested) => {
-    if (requested && view && takeEditorFocusRequest()) view.focus();
-  });
+  createEffect(
+    () => isActive() && editorFocusRequested(),
+    (requested) => {
+      if (requested && view && takeEditorFocusRequest()) view.focus();
+    },
+  );
+
+  createEffect(
+    isActive,
+    (active) => {
+      if (!active || !view || !editorHandle) return;
+      registerEditorApi(editorHandle);
+      resetViewportState();
+      setViewportLine(topVisibleLine(view));
+      publishSelection(view.state);
+      publishOutline();
+    },
+    { defer: true },
+  );
 
   createEffect(mode, () => {
     if (!view) return;
@@ -324,7 +372,7 @@ export default function SourceEditor(props: EditorProps) {
 
   // A copy menu belongs to the table it was opened from; switching view or document drops it.
   createEffect(
-    () => ({ mode: props.mode, id: activeDocumentId() }),
+    () => ({ mode: props.mode, id: documentId() }),
     () => {
       copyMenu.close();
     },
@@ -340,10 +388,10 @@ export default function SourceEditor(props: EditorProps) {
   );
 
   createEffect(
-    () => ({ id: activeDocumentId(), revision: activeRevision() }),
+    () => ({ id: documentId(), revision: recordRevision() }),
     ({ id, revision }) => {
       if (!view || !session) return;
-      const text = untrack(docText);
+      const text = untrack(record).text;
       if (id === session.documentId()) {
         session.replaceText(id, text, revision);
         return;
@@ -351,7 +399,7 @@ export default function SourceEditor(props: EditorProps) {
       const restoredSession = session.open(id, text, revision);
       syncPresentation(view, false);
       syncRulers(view);
-      resetViewportState();
+      if (untrack(isActive)) resetViewportState();
       if (!restoredSession) {
         view.scrollDOM.scrollTop = 0;
         restorePosition(view, id);
@@ -368,9 +416,12 @@ export default function SourceEditor(props: EditorProps) {
     { defer: true },
   );
 
-  createEffect(readingViewportLine, (line) => {
-    if (line > 0 && session) savePosition(session.documentId(), { line });
-  });
+  createEffect(
+    () => (isActive() ? readingViewportLine() : 0),
+    (line) => {
+      if (line > 0 && session) savePosition(session.documentId(), { line });
+    },
+  );
 
   return (
     <section class="editor-workspace flex h-full min-h-0 flex-col" aria-label="Markdown workspace">

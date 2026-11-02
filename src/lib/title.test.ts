@@ -267,12 +267,12 @@ describe("isAutomaticTitle", () => {
 
 describe("pageTitle", () => {
   it("names the page after the document, then the app", () => {
-    expect(pageTitle("Zanzibar itinerary")).toBe("Zanzibar itinerary · emdy.md");
+    expect(pageTitle("Zanzibar itinerary")).toBe("Zanzibar itinerary · emdy");
   });
 
   it("falls back to the descriptive home title", () => {
     expect(pageTitle(null)).toBe(HOME_TITLE);
     expect(pageTitle("")).toBe(HOME_TITLE);
-    expect(HOME_TITLE).toBe("emdy.md · Private Markdown editor that runs in your browser");
+    expect(HOME_TITLE).toBe("emdy · Private Markdown editor that runs in your browser");
   });
 });

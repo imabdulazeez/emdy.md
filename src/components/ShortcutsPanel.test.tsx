@@ -1,10 +1,17 @@
 import { render, screen } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { DESKTOP_BRIDGE_KEY } from "~/lib/desktop/bridge";
+import { isMacPlatform } from "~/lib/shortcuts";
 import { resetUiState, setShortcutsOpen, shortcutsOpen } from "~/state/ui";
 import ShortcutsPanel from "./ShortcutsPanel";
 
-afterEach(() => resetUiState());
+const host = globalThis as Record<string, unknown>;
+
+afterEach(() => {
+  resetUiState();
+  delete host[DESKTOP_BRIDGE_KEY];
+});
 
 async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -24,6 +31,24 @@ describe("ShortcutsPanel", () => {
     expect(screen.getByRole("heading", { name: "Layout" })).toBeInTheDocument();
     expect(screen.getByText("Toggle focus mode")).toBeInTheDocument();
     expect(screen.getByText("Bold")).toBeInTheDocument();
+  });
+
+  it("lists the browser's New document keys outside the desktop app", async () => {
+    render(() => <ShortcutsPanel />);
+    setShortcutsOpen(true);
+    await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    const row = screen.getByText("New document").parentElement!;
+    expect(row).toHaveTextContent(isMacPlatform() ? "⌘⌥N" : "Ctrl+Alt+N");
+  });
+
+  it("lists the desktop app's New document keys in the desktop app", async () => {
+    host[DESKTOP_BRIDGE_KEY] = {};
+    render(() => <ShortcutsPanel />);
+    setShortcutsOpen(true);
+    await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    const row = screen.getByText("New document").parentElement!;
+    expect(row).toHaveTextContent(isMacPlatform() ? "⌘N" : "Ctrl+N");
+    expect(row).not.toHaveTextContent(isMacPlatform() ? "⌘⌥N" : "Ctrl+Alt+N");
   });
 
   it("moves focus into the dialog and restores it on close", async () => {

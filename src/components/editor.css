@@ -229,6 +229,7 @@
 }
 
 .editor-host .cm-live-link {
+  --color-syntax-url: var(--color-syntax-link);
   color: var(--color-syntax-link);
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
@@ -237,9 +238,62 @@
 
 .editor-host .cm-live-quote {
   border-left: 2px solid var(--color-border-strong);
-  padding: 0 1.25rem;
+  padding: 0 2.25rem 0 1.25rem;
   color: var(--color-syntax-quote);
   font-style: italic;
+}
+
+.editor-host .cm-live-quote-start {
+  position: relative;
+}
+
+.editor-host .cm-live-quote-copy {
+  position: absolute;
+  top: calc((1lh - 1.5rem) / 2);
+  right: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-faint);
+  font-style: normal;
+  opacity: 0.6;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    color 120ms,
+    opacity 120ms;
+}
+
+.editor-host .cm-live-quote-start:hover .cm-live-quote-copy,
+.editor-host .cm-live-quote-copy:focus-visible,
+.editor-host .cm-live-quote-copy[data-copied="true"] {
+  opacity: 1;
+}
+
+.editor-host .cm-live-quote-copy:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.editor-host .cm-live-quote-copy:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.editor-host .cm-live-quote-copy[data-copied="true"] {
+  color: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-host .cm-live-quote-copy {
+    transition: none;
+  }
 }
 
 .editor-host .cm-live-quote .cm-live-footnote {
@@ -638,7 +692,7 @@
 }
 
 .editor-host .cm-selectionBackground,
-.editor-host .cm-editor.cm-focused .cm-selectionBackground,
+.editor-host .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
 .editor-host .cm-content ::selection {
   background: var(--color-selection);
 }

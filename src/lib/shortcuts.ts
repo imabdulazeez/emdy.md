@@ -1,10 +1,19 @@
-import type { LayoutMode } from "~/state/layout";
+import type { LayoutMode } from "../state/layout";
+import { isDesktop } from "./desktop/bridge";
 
-export type ShortcutGroup = "Layout" | "View" | "Formatting" | "Blocks" | "Editing" | "Help";
+export type ShortcutGroup =
+  | "File"
+  | "Layout"
+  | "View"
+  | "Formatting"
+  | "Blocks"
+  | "Editing"
+  | "Help";
 
 export interface Shortcut {
   id: string;
   keys: string;
+  desktopKeys?: string;
   label: string;
   group: ShortcutGroup;
 }
@@ -34,10 +43,19 @@ export const SHORTCUTS = [
     label: "Read-only preview",
     group: "Layout",
   },
+  {
+    id: "new-document",
+    keys: "Mod-Alt-n",
+    desktopKeys: "Mod-n",
+    label: "New document",
+    group: "File",
+  },
+  { id: "save", keys: "Mod-s", label: "Save", group: "File" },
   { id: "toggle-sidebar", keys: "Mod-\\", label: "Toggle sidebar", group: "View" },
-  { id: "new-document", keys: "Mod-Alt-n", label: "New document", group: "View" },
   { id: "search", keys: "Mod-p", label: "Search documents", group: "View" },
   { id: "toggle-focus", keys: "Mod-Shift-f", label: "Toggle focus mode", group: "View" },
+  { id: "switch-pane", keys: "Mod-Alt-s", label: "Switch split pane", group: "View" },
+  { id: "close-split", keys: "Mod-Alt-Shift-s", label: "Close split view", group: "View" },
   { id: "exit-focus", keys: "Escape", label: "Exit focus mode", group: "View" },
   { id: "close-settings", keys: "Escape", label: "Close settings", group: "View" },
   { id: "context-menu", keys: "Shift-F10", label: "Open context menu", group: "View" },
@@ -80,14 +98,19 @@ export const SHORTCUTS = [
 
 export type ShortcutId = (typeof SHORTCUTS)[number]["id"];
 
+export function keysFor(shortcut: Shortcut, desktop: boolean = isDesktop()): string {
+  return (desktop && shortcut.desktopKeys) || shortcut.keys;
+}
+
 /** The keys registered for a shortcut, in CodeMirror `Mod-` notation. */
-export function shortcutKeys(id: ShortcutId): string {
-  const shortcut = SHORTCUTS.find((entry) => entry.id === id);
+export function shortcutKeys(id: ShortcutId, desktop: boolean = isDesktop()): string {
+  const shortcut: Shortcut | undefined = SHORTCUTS.find((entry) => entry.id === id);
   if (!shortcut) throw new Error(`Unknown shortcut: ${id}`);
-  return shortcut.keys;
+  return keysFor(shortcut, desktop);
 }
 
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
+  "File",
   "Layout",
   "View",
   "Formatting",
@@ -161,6 +184,16 @@ export function ariaKeyShortcuts(keys: string, mac: boolean): string {
   return parts.join("+");
 }
 
+/** A click that opens in split view: Cmd-click on macOS, Ctrl-click elsewhere. */
+export function isSplitClick(
+  event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey" | "altKey">,
+  mac: boolean,
+): boolean {
+  const mod = mac ? event.metaKey : event.ctrlKey;
+  const other = mac ? event.ctrlKey : event.metaKey;
+  return mod && !other && !event.shiftKey && !event.altKey;
+}
+
 export interface KeyEventLike {
   key: string;
   /** Physical key, used when Option/Alt turns a letter into another character (⌥C is "ç" on a Mac). */
@@ -199,6 +232,9 @@ export interface GlobalShortcutHandlers {
   toggleSettings(): void;
   focusSearch(): void;
   createDocument(): void;
+  save(): void;
+  switchPane(): void;
+  closeSplit(): void;
 }
 
 /** Shortcuts handled by the window-level capture listener in `AppShell`. */
@@ -211,8 +247,11 @@ export const GLOBAL_SHORTCUTS: readonly (readonly [
   ["layout-reader", (handlers) => handlers.setLayout("reader")],
   ["toggle-sidebar", (handlers) => handlers.toggleSidebar()],
   ["new-document", (handlers) => handlers.createDocument()],
+  ["save", (handlers) => handlers.save()],
   ["search", (handlers) => handlers.focusSearch()],
   ["toggle-focus", (handlers) => handlers.toggleFocusMode()],
+  ["switch-pane", (handlers) => handlers.switchPane()],
+  ["close-split", (handlers) => handlers.closeSplit()],
   ["shortcuts", (handlers) => handlers.toggleShortcuts()],
   ["settings", (handlers) => handlers.toggleSettings()],
 ];
@@ -221,12 +260,24 @@ export function handleGlobalShortcut(
   event: KeyEventLike,
   handlers: GlobalShortcutHandlers,
   mac: boolean,
+  desktop: boolean = isDesktop(),
 ): boolean {
   for (const [id, run] of GLOBAL_SHORTCUTS) {
-    if (matchesShortcut(event, shortcutKeys(id), mac)) {
+    if (matchesShortcut(event, shortcutKeys(id, desktop), mac)) {
       run(handlers);
       return true;
     }
   }
   return false;
+}
+
+export function isGlobalShortcutId(value: unknown): value is ShortcutId {
+  return GLOBAL_SHORTCUTS.some(([id]) => id === value);
+}
+
+export function runGlobalShortcut(id: ShortcutId, handlers: GlobalShortcutHandlers): boolean {
+  const entry = GLOBAL_SHORTCUTS.find(([candidate]) => candidate === id);
+  if (!entry) return false;
+  entry[1](handlers);
+  return true;
 }
