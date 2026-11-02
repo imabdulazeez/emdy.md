@@ -133,6 +133,16 @@ describe("Outline", () => {
     expect(screen.getByRole("button", { name: "One" })).toHaveAttribute("aria-current", "location");
   });
 
+  it("returns the list to its very top when the first heading becomes active", () => {
+    flush(() => setOutline(ONE_TWO));
+    render(() => <Outline />);
+    flush(() => setCursor({ line: 6, column: 1 }));
+    const list = screen.getByRole("navigation", { name: "Outline" });
+    list.scrollTop = 200;
+    flush(() => setCursor({ line: 1, column: 1 }));
+    expect(list.scrollTop).toBe(0);
+  });
+
   it("falls back to the cursor while the viewport is unknown", () => {
     flush(() => setOutline(ONE_TWO));
     render(() => <Outline />);

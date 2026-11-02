@@ -20,6 +20,10 @@ export default function Outline() {
   createEffect(activeIndex, (index) => {
     const entry = index >= 0 ? entries[index] : undefined;
     if (!list || !entry) return;
+    if (index === 0) {
+      list.scrollTop = 0;
+      return;
+    }
     const listTop = list.getBoundingClientRect().top;
     const entryRect = entry.getBoundingClientRect();
     list.scrollTop = nearestScrollTop({

@@ -223,6 +223,51 @@ describe("AppSidebar", () => {
     expect(namesInGroup("Today")).toEqual(["Forgotten", "Fresh"]);
   });
 
+  describe("focus when rows move", () => {
+    const load = () =>
+      flush(() =>
+        loadDocuments([
+          { id: "aaa111", title: "Fresh", text: "", modified: daysAgo(0) },
+          { id: "ccc333", title: "Second", text: "", modified: daysAgo(0) - 1000 },
+          { id: "fff666", title: "Forgotten", text: "", modified: daysAgo(400) },
+        ]),
+      );
+    const edit = (id: string) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: daysAgo(0) + 1000 });
+      flush(() => saveDocumentText(id, "written again"));
+      vi.useRealTimers();
+    };
+
+    it("keeps focus on a row that moves within its group", () => {
+      load();
+      mount();
+      const row = screen.getByRole("button", { name: "Second" });
+      row.focus();
+      edit("ccc333");
+      expect(namesInGroup("Today")).toEqual(["Second", "Fresh"]);
+      expect(screen.getByRole("button", { name: "Second" })).toBe(row);
+      expect(row).toHaveFocus();
+    });
+
+    it("follows a row that moves to another group", () => {
+      load();
+      mount();
+      screen.getByRole("button", { name: "Forgotten" }).focus();
+      edit("fff666");
+      expect(namesInGroup("Today")).toEqual(["Forgotten", "Fresh", "Second"]);
+      expect(screen.getByRole("button", { name: "Forgotten" })).toHaveFocus();
+    });
+
+    it("leaves focus alone when it is outside the list", () => {
+      load();
+      mount();
+      const search = screen.getByRole("searchbox", { name: "Search documents" });
+      search.focus();
+      edit("fff666");
+      expect(search).toHaveFocus();
+    });
+  });
+
   it("neither re-renders nor recomputes rows when an edit changes only the text", async () => {
     flush(() =>
       loadDocuments([

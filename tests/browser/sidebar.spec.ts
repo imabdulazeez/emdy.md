@@ -81,8 +81,9 @@ test("the desktop sidebar cannot collapse and paints at full width from the firs
 test("the narrow-screen drawer opens with Mod-\\ and shuts when the window widens", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1600, height: 900 });
   await seedLibrary(page);
+  await page.setViewportSize({ width: 390, height: 844 });
   const drawer = page.getByRole("dialog", { name: "Sidebar", exact: true });
   const aside = page.getByRole("complementary", { name: "Sidebar", exact: true });
   await expect(aside).toHaveCount(0);
@@ -102,6 +103,26 @@ test("the narrow-screen drawer opens with Mod-\\ and shuts when the window widen
   await expect(aside).toHaveCount(0);
   await expect(drawer).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Show sidebar", exact: true })).toBeVisible();
+});
+
+test("a focused row keeps focus when an edit moves it to the top of the list", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await seedLibrary(page);
+  const list = page.getByRole("list", { name: "Documents", exact: true });
+  const reading = list.getByRole("button", { name: "Reading list", exact: true });
+  await reading.click();
+  const rows = list.locator("[data-document-row]");
+  await expect(rows.first()).not.toContainText("Reading list");
+
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await editor.press("ControlOrMeta+End");
+  await page.keyboard.type(" Moved.");
+  await reading.focus();
+
+  await expect(rows.first()).toContainText("Reading list");
+  await expect(reading).toBeFocused();
+  await page.keyboard.press("Shift+F10");
+  await expect(page.getByRole("menu", { name: "Reading list", exact: true })).toBeVisible();
 });
 
 test("a phone never paints the desktop sidebar rail while booting", async ({ page }) => {

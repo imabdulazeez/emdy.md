@@ -277,6 +277,27 @@ export default function AppSidebar() {
   const hasResults = () => results().titles.length > 0 || results().contents.length > 0;
 
   createEffect(
+    () => {
+      pinned();
+      sections();
+      shelfItems();
+      const control = document.activeElement;
+      const row = control?.closest<HTMLElement>("[data-document-row]");
+      return row ? { control: control as HTMLElement, id: row.dataset.documentId } : null;
+    },
+    (focused) => {
+      if (!focused) return;
+      if (document.activeElement && document.activeElement !== document.body) return;
+      const control = focused.control.isConnected
+        ? focused.control
+        : Array.from(document.querySelectorAll<HTMLElement>("[data-document-row]"))
+            .find((row) => row.dataset.documentId === focused.id)
+            ?.querySelector<HTMLElement>("[data-sidebar=menu-button]");
+      control?.focus();
+    },
+  );
+
+  createEffect(
     () => searchRequested() && (!sidebar.isMobile() || sidebar.open()),
     (ready) => {
       if (!ready || !takeSearchRequest()) return;
