@@ -52,6 +52,50 @@ describe("Outline", () => {
     expect(screen.queryByText(/min read/)).toBeNull();
   });
 
+  it("edges the rail with a scroll divider", () => {
+    flush(() => setOutline(ONE_TWO));
+    render(() => <Outline />);
+    const rail = screen.getByRole("complementary", { name: "Contents" });
+    expect(rail).toContainElement(screen.getByTestId("scroll-rail"));
+  });
+
+  it("hangs a leading section number in its own column and keeps the full name", () => {
+    flush(() =>
+      setOutline([
+        { level: 2, text: "9. Disposals: some lines repeat", line: 1 },
+        { level: 2, text: "10. Units", line: 3 },
+        { level: 2, text: "Notes", line: 5 },
+      ]),
+    );
+    render(() => <Outline />);
+    const nine = screen.getByRole("button", { name: "9. Disposals: some lines repeat" });
+    expect(nine.querySelector(".outline-entry-number")).toHaveTextContent("9.");
+    expect(nine.querySelector(".outline-entry-text")?.textContent).toBe(
+      "Disposals: some lines repeat",
+    );
+    expect(nine).toHaveAttribute("title", "9. Disposals: some lines repeat");
+    const notes = screen.getByRole("button", { name: "Notes" });
+    expect(notes.querySelector(".outline-entry-number")).toBeNull();
+    expect(screen.getByRole("list").style.getPropertyValue("--outline-number-width")).toBe("3ch");
+  });
+
+  it("opens a gap where the outline returns to a shallower section", () => {
+    flush(() =>
+      setOutline([
+        { level: 2, text: "A", line: 1 },
+        { level: 3, text: "A.1", line: 3 },
+        { level: 2, text: "B", line: 5 },
+      ]),
+    );
+    render(() => <Outline />);
+    const items = screen.getAllByRole("listitem");
+    expect(items.map((item) => item.hasAttribute("data-section-start"))).toEqual([
+      false,
+      false,
+      true,
+    ]);
+  });
+
   it("lists headings with indentation by level", () => {
     flush(() =>
       setOutline([

@@ -1,0 +1,50 @@
+.scroll-rail {
+  position: absolute;
+  top: var(--doc-top);
+  right: 0;
+  bottom: 1.5rem;
+  width: 11px;
+  touch-action: none;
+}
+
+.scroll-rail[data-scrollable="false"] {
+  pointer-events: none;
+}
+
+.scroll-rail::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--color-border);
+}
+
+.scroll-rail-thumb {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 999px;
+  background: var(--color-border-strong);
+  opacity: 0;
+  transition:
+    width 120ms var(--ease-out-quick),
+    margin-left 120ms var(--ease-out-quick),
+    background-color 120ms var(--ease-out-quick),
+    opacity 120ms var(--ease-out-quick);
+}
+
+.scroll-rail[data-scrollable="true"] .scroll-rail-thumb {
+  opacity: 1;
+}
+
+.scroll-rail[data-scrollable="true"]:hover .scroll-rail-thumb,
+.scroll-rail[data-dragging] .scroll-rail-thumb {
+  width: 4px;
+  margin-left: -2px;
+  background: var(--color-text-faint);
+}
