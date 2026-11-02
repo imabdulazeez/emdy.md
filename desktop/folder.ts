@@ -21,6 +21,11 @@ export interface FolderAccessOptions {
   root: () => string;
   session: () => number;
   onWrite?: (path: readonly string[], name: string) => void;
+  onWritten?: (
+    path: readonly string[],
+    name: string,
+    signature: { size: number; mtimeMs: number },
+  ) => void;
   createRoot?: () => boolean;
   platform?: NodeJS.Platform;
 }
@@ -231,6 +236,14 @@ export function createFolderAccess(options: FolderAccessOptions): FolderAccess {
         const real = await writeTarget(target);
         const staged = join(dirname(real.path), stagingName());
         await writeStaged(real.path, staged, text, platform, real.mode);
+        if (options.onWritten) {
+          const written = await stat(real.path).catch(() => null);
+          if (written)
+            options.onWritten(segments(session, path), name as string, {
+              size: written.size,
+              mtimeMs: written.mtimeMs,
+            });
+        }
         return null;
       }),
     remove: (session, path, name) =>

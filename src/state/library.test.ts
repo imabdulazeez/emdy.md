@@ -288,6 +288,38 @@ describe("library tracking", () => {
     expect(background).toHaveBeenCalled();
   });
 
+  it("publishes the editors' pending text before re-reading the folder", async () => {
+    const browser = createMemoryDirectory();
+    await seedDirectory(browser, TEST_DOCUMENTS);
+    restore = useLibraryDirectory(async () => browser);
+    await startLibrary();
+    flush();
+    track(trackingWindow());
+    const pending = vi.fn(() => saveDocumentText("readng", "# Reading list\n\nstill typing"));
+    registerLiveEditor(
+      {
+        scrollToLine: vi.fn(),
+        focus: vi.fn(),
+        getText: () => "",
+        flush: pending,
+        runCommand: vi.fn(),
+        applyEdits: vi.fn(),
+      },
+      () => "readng",
+    );
+    browser.place("Reading list.md", "# Reading list\n\nfrom another device", 9_000);
+    await refreshLibrary();
+    flush();
+    expect(pending).toHaveBeenCalled();
+    expect(findDocument("readng")?.text).toBe("# Reading list\n\nstill typing");
+    await vi.waitFor(() => {
+      expect(browser.files()["Reading list (conflict).md"]).toBe(
+        "# Reading list\n\nfrom another device",
+      );
+      expect(browser.files()["Reading list.md"]).toBe("# Reading list\n\nstill typing");
+    });
+  });
+
   it("keeps every document removed outside the app in one refresh gone", async () => {
     const browser = await storage();
     await startLibrary();

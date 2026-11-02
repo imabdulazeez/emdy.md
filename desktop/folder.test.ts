@@ -159,6 +159,17 @@ describe("createFolderAccess", () => {
     expect((await stat(join(root, "Private.md"))).mode & 0o777).toBe(0o600);
   });
 
+  it("reports what landed on disk after a write", async () => {
+    const onWritten = vi.fn();
+    const folder = createFolderAccess({ root: () => root, session: () => session, onWritten });
+    await folder.write(1, [], "Notes.md", "héllo");
+    const info = await stat(join(root, "Notes.md"));
+    expect(onWritten).toHaveBeenCalledWith([], "Notes.md", {
+      size: 6,
+      mtimeMs: info.mtimeMs,
+    });
+  });
+
   it("lists files with byte sizes and whole-millisecond times, skipping folders", async () => {
     await writeFile(join(root, "a.md"), "héllo");
     await utimes(join(root, "a.md"), 1_700_000_000.5, 1_700_000_000.5);

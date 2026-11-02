@@ -1,33 +1,46 @@
 import { watch as watchFileSystem, type FSWatcher } from "node:fs";
-import { basename, dirname } from "node:path";
+import { stat } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { isMarkdownFile } from "../src/lib/storage/filenames";
 
 export const OWN_WRITE_WINDOW_MS = 1_500;
 export const CHANGE_DEBOUNCE_MS = 200;
 
+export interface FileSignature {
+  size: number;
+  mtimeMs: number;
+}
+
 export interface WriteLog {
   record: (name: string) => void;
+  settle: (name: string, signature: FileSignature) => void;
   isOwn: (name: string) => boolean;
+  written: (name: string) => FileSignature | null;
 }
 
 export function createWriteLog(
   now: () => number = Date.now,
   windowMs: number = OWN_WRITE_WINDOW_MS,
 ): WriteLog {
-  const recent = new Map<string, number>();
+  const recent = new Map<string, { at: number; signature: FileSignature | null }>();
+  const isOwn = (name: string) => {
+    const entry = recent.get(name);
+    if (!entry) return false;
+    if (now() - entry.at > windowMs) {
+      recent.delete(name);
+      return false;
+    }
+    return true;
+  };
   return {
     record(name) {
-      recent.set(name, now());
+      recent.set(name, { at: now(), signature: null });
     },
-    isOwn(name) {
-      const at = recent.get(name);
-      if (at === undefined) return false;
-      if (now() - at > windowMs) {
-        recent.delete(name);
-        return false;
-      }
-      return true;
+    settle(name, signature) {
+      recent.set(name, { at: now(), signature });
     },
+    isOwn,
+    written: (name) => (isOwn(name) ? (recent.get(name)?.signature ?? null) : null),
   };
 }
 
@@ -58,7 +71,14 @@ export interface WatchOptions {
   debounceMs?: number;
   watch?: WatchFunction;
   timers?: WatchTimers;
+  inspect?: (path: string) => Promise<FileSignature | null>;
 }
+
+const inspectFile = (path: string): Promise<FileSignature | null> =>
+  stat(path).then(
+    ({ size, mtimeMs }) => ({ size, mtimeMs }),
+    () => null,
+  );
 
 export function watchFolder(folder: string, options: WatchOptions): () => void {
   const timers = options.timers ?? {
@@ -71,22 +91,34 @@ export function watchFolder(folder: string, options: WatchOptions): () => void {
       watchFileSystem(path, { persistent: false }, (event, filename) =>
         listener(event, filename === null ? null : String(filename)),
       ));
+  const inspect = options.inspect ?? inspectFile;
   let pending: unknown = null;
+  let stopped = false;
+  const schedule = () => {
+    if (stopped) return;
+    if (pending !== null) timers.clearTimeout(pending);
+    pending = timers.setTimeout(() => {
+      pending = null;
+      options.onChange();
+    }, options.debounceMs ?? CHANGE_DEBOUNCE_MS);
+  };
+  const confirmOwn = async (filename: string) => {
+    const found = await inspect(join(folder, filename));
+    const written = options.log.written(filename);
+    if (written && (found?.size !== written.size || found.mtimeMs !== written.mtimeMs)) schedule();
+  };
   let watcher: FSWatcher;
   try {
     watcher = watch(folder, (_event, filename) => {
-      if (!isOutsideChange(filename, options.log, options.relevant)) return;
-      if (pending !== null) timers.clearTimeout(pending);
-      pending = timers.setTimeout(() => {
-        pending = null;
-        options.onChange();
-      }, options.debounceMs ?? CHANGE_DEBOUNCE_MS);
+      if (isOutsideChange(filename, options.log, options.relevant)) schedule();
+      else if (filename !== null && options.log.written(filename)) void confirmOwn(filename);
     });
   } catch {
     return () => {};
   }
   watcher.on("error", () => watcher.close());
   return () => {
+    stopped = true;
     if (pending !== null) timers.clearTimeout(pending);
     pending = null;
     watcher.close();

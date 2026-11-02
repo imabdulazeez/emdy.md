@@ -23,6 +23,20 @@ describe("createWriteLog", () => {
     expect(log.isOwn("a.md")).toBe(false);
     expect(log.isOwn("b.md")).toBe(false);
   });
+
+  it("only knows a write's signature once it has landed, and only inside the window", () => {
+    let clock = 0;
+    const log = createWriteLog(() => clock, 1_000);
+    log.record("a.md");
+    expect(log.written("a.md")).toBeNull();
+    log.settle("a.md", { size: 1, mtimeMs: 2 });
+    expect(log.written("a.md")).toEqual({ size: 1, mtimeMs: 2 });
+    log.record("a.md");
+    expect(log.written("a.md")).toBeNull();
+    log.settle("a.md", { size: 3, mtimeMs: 4 });
+    clock = 1_001;
+    expect(log.written("a.md")).toBeNull();
+  });
 });
 
 describe("isOutsideChange", () => {
@@ -80,6 +94,73 @@ describe("watchFolder", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     stop();
     expect(fake.emitter.close).toHaveBeenCalled();
+  });
+
+  it("reacts when a file the app just wrote no longer matches what it wrote", async () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const log = createWriteLog(() => 0);
+    log.settle("a.md", { size: 5, mtimeMs: 100 });
+    const inspect = vi.fn(async () => ({ size: 9, mtimeMs: 200 }));
+    const fake = fakeWatcher();
+    watchFolder("/notes", { log, onChange, debounceMs: 10, watch: fake.watch, inspect });
+    fake.fire("a.md");
+    await vi.advanceTimersByTimeAsync(10);
+    expect(inspect).toHaveBeenCalledWith(join("/notes", "a.md"));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("reacts when a file the app just wrote has been removed", async () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const log = createWriteLog(() => 0);
+    log.settle("a.md", { size: 5, mtimeMs: 100 });
+    const fake = fakeWatcher();
+    watchFolder("/notes", {
+      log,
+      onChange,
+      debounceMs: 10,
+      watch: fake.watch,
+      inspect: async () => null,
+    });
+    fake.fire("a.md");
+    await vi.advanceTimersByTimeAsync(10);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays quiet when the file still matches, or while the write has not landed", async () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const log = createWriteLog(() => 0);
+    log.settle("a.md", { size: 5, mtimeMs: 100 });
+    log.record("b.md");
+    const inspect = vi.fn(async () => ({ size: 5, mtimeMs: 100 }));
+    const fake = fakeWatcher();
+    watchFolder("/notes", { log, onChange, debounceMs: 10, watch: fake.watch, inspect });
+    fake.fire("a.md");
+    fake.fire("b.md");
+    await vi.advanceTimersByTimeAsync(50);
+    expect(inspect).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not notify once stopped while a check is running", async () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const log = createWriteLog(() => 0);
+    log.settle("a.md", { size: 5, mtimeMs: 100 });
+    const fake = fakeWatcher();
+    const stop = watchFolder("/notes", {
+      log,
+      onChange,
+      debounceMs: 10,
+      watch: fake.watch,
+      inspect: async () => null,
+    });
+    fake.fire("a.md");
+    stop();
+    await vi.advanceTimersByTimeAsync(50);
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("stays quiet for the app's own writes", () => {

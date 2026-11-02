@@ -101,6 +101,24 @@ test("files another app writes into the folder appear without a restart", async 
   await expect(editor).not.toContainText("from another app");
 });
 
+test("an outside edit that lands while the user is typing is kept as a conflict copy", async () => {
+  const { page } = await open();
+  await createDocument(page, "Busy", "# Busy");
+  await expect.poll(() => readFolderFile(sandbox.folder, "Busy.md")).toBe("# Busy");
+  const editor = page.getByRole("textbox", { name: "Markdown editor", exact: true });
+  await editor.press("ControlOrMeta+End");
+  await page.keyboard.type(" one");
+  await expect.poll(() => readFolderFile(sandbox.folder, "Busy.md")).toBe("# Busy one");
+
+  await page.keyboard.type(" two");
+  await writeFile(join(sandbox.folder, "Busy.md"), "# Busy from another device");
+
+  await expect
+    .poll(() => readFolderFile(sandbox.folder, "Busy (conflict).md"))
+    .toBe("# Busy from another device");
+  await expect.poll(() => readFolderFile(sandbox.folder, "Busy.md")).toBe("# Busy one two");
+});
+
 test("the last edit is saved when the app quits straight after typing", async () => {
   const session = await open();
   await createDocument(session.page, "Quick note", "# Quick note");

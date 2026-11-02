@@ -152,6 +152,8 @@ export async function flushLibrary(): Promise<void> {
 export async function refreshLibrary(): Promise<void> {
   const current = library;
   if (!current || untrack(status).kind !== "ready") return;
+  flushEditors();
+  flush();
   await current.refresh((id) => findDocument(id)?.text);
 }
 

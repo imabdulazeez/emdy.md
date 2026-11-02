@@ -88,6 +88,9 @@ const folder = createFolderAccess({
   onWrite: (path, name) => {
     if (path.length === 0) writes.record(name);
   },
+  onWritten: (path, name, signature) => {
+    if (path.length === 0) writes.settle(name, signature);
+  },
 });
 
 function configFile(): string {
