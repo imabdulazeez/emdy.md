@@ -36,7 +36,12 @@ import { textContextMenu } from "./context-menu";
 import { pickSpellcheckLanguages, seedDictionaries } from "./dictionaries";
 import { createFolderAccess, isSafeSegment } from "./folder";
 import { applicationMenu } from "./menu";
-import { isAllowedRequest, isExternalUrl, isGrantedPermission } from "./network";
+import {
+  anonymousUserAgent,
+  isAllowedRequest,
+  isExternalUrl,
+  isGrantedPermission,
+} from "./network";
 import { createOpenedFiles, markdownPathsFromArgv, OPENED_FILES_STORE } from "./opened-files";
 import { createFolderWatchers, createWriteLog, watchFolder } from "./watcher";
 import {
@@ -248,6 +253,7 @@ function serveApp(): void {
 
 function lockDownSession(): void {
   const current = session.defaultSession;
+  current.setUserAgent(anonymousUserAgent(current.getUserAgent(), app.getName()));
   current.setPermissionRequestHandler((_contents, permission, callback) =>
     callback(isGrantedPermission(permission)),
   );

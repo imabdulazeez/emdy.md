@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vite-plus/test";
-import { isAllowedRequest, isExternalUrl, isGrantedPermission } from "./network";
+import {
+  anonymousUserAgent,
+  isAllowedRequest,
+  isExternalUrl,
+  isGrantedPermission,
+} from "./network";
+
+describe("anonymousUserAgent", () => {
+  it("removes the app and Electron tokens and keeps what a browser sends", () => {
+    expect(
+      anonymousUserAgent(
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) emdy/0.1.0 Chrome/138.0.0.0 Electron/37.2.0 Safari/537.36",
+        "emdy",
+      ),
+    ).toBe(
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    );
+  });
+
+  it("leaves a user agent without those tokens alone", () => {
+    const browser = "Mozilla/5.0 (Macintosh) Chrome/138.0.0.0 Safari/537.36";
+    expect(anonymousUserAgent(browser, "emdy")).toBe(browser);
+  });
+});
 
 describe("isAllowedRequest", () => {
   it("lets the app load its own bundle", () => {

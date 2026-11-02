@@ -33,6 +33,13 @@ export function isAllowedRequest(
   return resourceType === "image" && REMOTE_IMAGE_SCHEMES.has(parsed.protocol);
 }
 
+export function anonymousUserAgent(userAgent: string, appName: string): string {
+  return userAgent
+    .split(" ")
+    .filter((token) => !token.startsWith(`${appName}/`) && !token.startsWith("Electron/"))
+    .join(" ");
+}
+
 export function isExternalUrl(url: string): boolean {
   const parsed = parse(url);
   return parsed !== null && EXTERNAL_SCHEMES.has(parsed.protocol);

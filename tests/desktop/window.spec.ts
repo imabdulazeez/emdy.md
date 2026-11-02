@@ -17,6 +17,13 @@ test.afterEach(async () => {
   await sandbox.dispose();
 });
 
+test("the user agent an embedded image's host sees names neither the app nor Electron", async () => {
+  session = await launchDesktop(sandbox);
+  const userAgent = await session.page.evaluate(() => navigator.userAgent);
+  expect(userAgent).toContain("Chrome/");
+  expect(userAgent).not.toMatch(/Electron\/|emdy\//i);
+});
+
 test("the macOS title bar is part of the app and the window drags by its chrome", async () => {
   test.skip(process.platform !== "darwin", "The native frame is kept on Windows and Linux");
   session = await launchDesktop(sandbox);
