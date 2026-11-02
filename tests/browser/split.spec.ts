@@ -233,6 +233,42 @@ test("an edit made in a split pane is still there when another pane reopens the 
     .toContain("typed in the split pane and kept");
 });
 
+test("a split opened in one tab leaves another tab on the same library alone", async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await seedLibrary(page);
+  await row(page, "Welcome to emdy").click();
+  await expect(editors(page)).toHaveCount(1);
+
+  const other = await context.newPage();
+  await other.setViewportSize({ width: 1600, height: 900 });
+  await other.goto(page.url());
+  await expect(editors(other)).toHaveCount(1);
+  const heard = page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        window.addEventListener("storage", (event) => {
+          if (event.key === "emdy:workspace:split") resolve();
+        });
+      }),
+  );
+  await row(other, "Reading list").click({ modifiers: ["ControlOrMeta"] });
+  await expect(pane(other, "Welcome to emdy")).toBeVisible();
+  await expect(pane(other, "Reading list")).toBeVisible();
+
+  await expect(editors(other)).toHaveCount(2);
+  await heard;
+  await expect(editors(page)).toHaveCount(1);
+  await expect(pane(page, "Welcome to emdy")).toHaveCount(0);
+
+  await other.getByRole("button", { name: "Close Reading list pane", exact: true }).click();
+  await expect(editors(other)).toHaveCount(1);
+  await other.close();
+  await expect(editors(page)).toHaveCount(1);
+});
+
 test("a narrow window shows only the focused pane", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await seedLibrary(page);

@@ -96,6 +96,7 @@ const split = createPersistedSignal<SplitLayout | null>({
   key: storageKey("workspace", "split"),
   fallback: null,
   parse: isSplitLayout,
+  perTab: true,
 });
 
 const ratio = createPersistedSignal<number>({
