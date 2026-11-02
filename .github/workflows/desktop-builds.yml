@@ -108,7 +108,7 @@ jobs:
           retention-days: 30
 
   linux:
-    name: Linux (AppImage and tar.gz)
+    name: Linux (AppImage, tar.gz, and deb)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -147,5 +147,6 @@ jobs:
           path: |
             out/desktop/release/*.AppImage
             out/desktop/release/*.tar.gz
+            out/desktop/release/*.deb
           if-no-files-found: error
           retention-days: 30

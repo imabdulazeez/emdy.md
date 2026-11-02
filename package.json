@@ -2,6 +2,7 @@
   "name": "emdy-md",
   "version": "0.1.0",
   "description": "A local-first Markdown editor that keeps your documents as plain .md files.",
+  "homepage": "https://github.com/imabdulazeez/emdy.md",
   "license": "MIT",
   "type": "module",
   "scripts": {

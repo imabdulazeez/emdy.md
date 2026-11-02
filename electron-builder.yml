@@ -55,6 +55,8 @@ linux:
   target:
     - AppImage
     - tar.gz
+    - deb
+  maintainer: Abdul Azeez <16335012+imabdulazeez@users.noreply.github.com>
   category: Office
   mimeTypes:
     - text/markdown
