@@ -5,10 +5,13 @@ import { deriveTitle, isAutomaticTitle, UNTITLED } from "~/lib/title";
 import {
   forgetPosition,
   lastDocumentId,
+  peekSplitLayout,
   rememberDocument,
   retainPins,
   retainPositions,
+  setSplitLayout,
   unpinDocument,
+  type SplitSide,
 } from "./workspace";
 
 export const DEFAULT_TITLE = UNTITLED;
@@ -62,9 +65,34 @@ function startingDocumentId(list: readonly DocumentRecord[]): string {
 const [documents, setDocumentsSignal] = createSignal<DocumentRecord[]>([]);
 const [activeDocumentId, setActiveDocumentIdSignal] = createSignal("");
 
-function activate(id: string): void {
+let latestActiveId = "";
+
+function setActive(id: string): void {
+  latestActiveId = id;
   setActiveDocumentIdSignal(id);
+}
+
+export function oppositeSide(side: SplitSide): SplitSide {
+  return side === "left" ? "right" : "left";
+}
+
+function activate(id: string): void {
+  const previous = latestActiveId;
+  const split = peekSplitLayout();
+  if (split && split.other === id && previous && previous !== id)
+    setSplitLayout({ other: previous, side: oppositeSide(split.side) });
+  setActive(id);
   if (id) rememberDocument(id);
+}
+
+function pruneSplit(ids: readonly string[]): void {
+  const split = peekSplitLayout();
+  if (split && (split.other === latestActiveId || !ids.includes(split.other))) setSplitLayout(null);
+}
+
+/** The active document id, including a change made earlier in the same batch. */
+export function currentDocumentId(): string {
+  return latestActiveId;
 }
 
 const activeDocument = createMemo(
@@ -132,6 +160,7 @@ export function loadDocuments(records: readonly DocumentInput[]): DocumentRecord
   retainPins(list.map((doc) => doc.id));
   setDocumentsSignal(list);
   activate(startingDocumentId(list));
+  pruneSplit(list.map((doc) => doc.id));
   return list;
 }
 
@@ -235,6 +264,37 @@ export function createDocument(titleValue = DEFAULT_TITLE, text = ""): DocumentR
 }
 
 /**
+ * Shows a document beside the active one and focuses it. With a split already open,
+ * it replaces the pane that is not focused. Returns false when there is nothing to split.
+ */
+export function openInSplit(id: string): boolean {
+  const current = latestActiveId;
+  if (!findDocument(id) || !current || id === current) return false;
+  const split = peekSplitLayout();
+  if (split?.other === id) {
+    activate(id);
+    return true;
+  }
+  setSplitLayout({ other: current, side: split ? oppositeSide(split.side) : "right" });
+  activate(id);
+  return true;
+}
+
+/** Closes the pane showing a document, leaving the other pane open on its own. */
+export function closePane(id: string): boolean {
+  const split = peekSplitLayout();
+  if (!split) return false;
+  if (id === split.other) {
+    setSplitLayout(null);
+    return true;
+  }
+  if (id !== latestActiveId) return false;
+  setSplitLayout(null);
+  activate(split.other);
+  return true;
+}
+
+/**
  * Removes a document. Deleting the active document opens its nearest neighbour;
  * deleting the last remaining document leaves the library empty.
  */
@@ -250,12 +310,14 @@ export function deleteDocument(id: string): boolean {
   if (index === -1) return false;
   forgetPosition(id);
   unpinDocument(id);
-  let next = "";
-  setActiveDocumentIdSignal((current) => {
-    if (current !== id) return current;
-    next = remaining[Math.min(index, remaining.length - 1)]?.id ?? "";
-    return next;
-  });
+  const split = peekSplitLayout();
+  if (split && (split.other === id || latestActiveId === id)) setSplitLayout(null);
+  if (latestActiveId !== id) return true;
+  const next =
+    split && split.other !== id
+      ? split.other
+      : (remaining[Math.min(index, remaining.length - 1)]?.id ?? "");
+  setActive(next);
   if (next) rememberDocument(next);
   return true;
 }
@@ -264,10 +326,10 @@ export function deleteDocument(id: string): boolean {
 export function resetDocumentState(records: readonly DocumentInput[] = []): void {
   const list = toRecords(records);
   setDocumentsSignal(list);
-  setActiveDocumentIdSignal(list[0]?.id ?? "");
+  setActive(list[0]?.id ?? "");
 }
 
 export function clearDocumentState(): void {
   setDocumentsSignal([]);
-  setActiveDocumentIdSignal("");
+  setActive("");
 }

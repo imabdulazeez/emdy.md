@@ -18,6 +18,8 @@ export const MENU_COMMANDS = {
   "layout-reader": "Read-only Preview",
   search: "Search Documents…",
   "toggle-focus": "Focus Mode",
+  "switch-pane": "Switch Split Pane",
+  "close-split": "Close Split View",
   shortcuts: "Keyboard Shortcuts",
 } as const satisfies Partial<Record<ShortcutId, string>>;
 
@@ -190,6 +192,9 @@ export function applicationMenu(
       { type: "separator" },
       commandItem("search", actions),
       commandItem("toggle-focus", actions),
+      { type: "separator" },
+      commandItem("switch-pane", actions),
+      commandItem("close-split", actions),
       { type: "separator" },
       {
         id: "zoom-reset",

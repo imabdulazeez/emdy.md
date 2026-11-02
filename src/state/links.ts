@@ -13,7 +13,7 @@ import {
   titleFromFilename,
 } from "~/lib/storage/filenames";
 import { activeDocumentId, documents, findDocument, title, updateDocumentText } from "./document";
-import { editorApi } from "./editor-api";
+import { editorApi, liveEditor } from "./editor-api";
 import { currentDocumentPath, type NavigationWindow } from "./navigation";
 import { ownsDocument } from "./opened-files";
 
@@ -91,7 +91,7 @@ export function rewriteDocumentLinks(renames: readonly DocumentRename[]): void {
   const editor = untrack(editorApi);
   for (const doc of untrack(documents)) {
     if (ownsDocument(doc.id)) continue;
-    const live = doc.id === active ? editor : null;
+    const live = liveEditor(doc.id) ?? (doc.id === active ? editor : null);
     const text = live ? live.getText() : doc.text;
     const edits = documentLinkEdits(text, renames);
     if (edits.length === 0) continue;

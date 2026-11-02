@@ -80,6 +80,14 @@ Rules:
 
 Typing `@` at the start of a word opens a menu of dates, other documents, headings (`@#`), and values of the open document; `/` at the start of a line opens the block menu. Both live in `src/lib/editor/composer.ts` and insert plain Markdown only, never a live token, because documents are `.md` files. They stay shut in code, links, URLs, and HTML. The document title field offers the same dates through its own small listbox in `DocumentTitle.tsx`; both surfaces share the trigger rule in `src/lib/mention-query.ts`. Dates come from the device's local calendar through `src/lib/dates.ts`; never derive a date from `toISOString()`, which is UTC.
 
+## Split view
+
+Two documents can sit side by side. Cmd-click (Ctrl-click elsewhere) or "Open in split view" in a sidebar row's context menu opens a document beside the active one; `switch-pane` and `close-split` move between and leave the panes. The active document is always the focused pane, so the toolbar, outline, status, and URL follow focus, and the other pane is `{ other, side }` in workspace state (`splitLayout`). Opening a document that the other pane shows moves focus there, so one document never appears twice.
+
+- `src/state/split.ts` lays out the panes. Each pane keeps a stable slot while it shows the same document, so the surviving editor and its undo history outlive a split closing. `EditorPanes` renders one `<Show>` per slot rather than a `<For>`: a `<For>` disposes items inside its computation, where the closing editor's cleanup writes would halt Solid.
+- `Editor` takes `documentId` and `active`. Only the active pane publishes the cursor, formats, outline, viewport, and `editorApi`. Every mounted pane registers through `registerLiveEditor`, so `flushEditors` and link rewrites reach the unfocused pane too. Code that needs "the editor for document X" uses `liveEditor(id)`, not `editorApi()`.
+- Focus moving between panes replaces the history entry instead of pushing one. Narrow screens show only the focused pane.
+
 ## Keyboard shortcuts
 
 Keyboard use is first class: every action is reachable from the keyboard, and every shortcut is declared once. `SHORTCUTS` in `src/lib/shortcuts.ts` is the registry. Each entry has an `id`, `keys` in CodeMirror notation (`Mod-Shift-f`; `Mod` is Cmd on macOS and Ctrl elsewhere), a `label`, and a panel `group`.

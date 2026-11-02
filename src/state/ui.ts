@@ -38,6 +38,11 @@ export function requestEditorFocus(): void {
   setEditorFocusRequestedSignal(true);
 }
 
+/** Asks the focused pane's editor to take focus, in whatever view is showing. */
+export function requestPaneFocus(): void {
+  setEditorFocusRequestedSignal(true);
+}
+
 export function takeEditorFocusRequest(): boolean {
   if (!untrack(editorFocusRequested)) return false;
   setEditorFocusRequestedSignal(false);

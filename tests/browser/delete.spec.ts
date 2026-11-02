@@ -101,7 +101,7 @@ async function deleteWithMouse(page: Page, title: string): Promise<void> {
 async function deleteWithKeyboard(page: Page, title: string): Promise<void> {
   await sidebarButton(page, title).focus();
   await page.keyboard.press("Shift+F10");
-  await expect(page.getByRole("menuitem", { name: "Change icon…", exact: true })).toBeFocused();
+  await expect(page.getByRole("menuitem").first()).toBeFocused();
   await page.keyboard.press("End");
   await expect(page.getByRole("menuitem", { name: "Delete…", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");

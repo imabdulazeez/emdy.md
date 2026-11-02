@@ -96,3 +96,10 @@
     display: flex;
   }
 }
+
+/* Two documents side by side need the width more than the outline does. */
+@container (max-width: 1499px) {
+  [data-split] > .outline-gutter {
+    display: none;
+  }
+}

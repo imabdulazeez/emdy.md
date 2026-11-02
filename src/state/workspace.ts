@@ -1,8 +1,10 @@
 import { isDocumentId } from "~/lib/route";
+import { isSplitRatio, SPLIT_RATIO_DEFAULT } from "~/lib/split-ratio";
 import { storageKey } from "~/lib/storage/key-value";
 import { createPersistedSignal } from "~/lib/storage/persisted";
 
 export const POSITION_WRITE_DELAY_MS = 300;
+export const SPLIT_RATIO_WRITE_DELAY_MS = 200;
 
 export interface DocumentPosition {
   anchor: number;
@@ -40,6 +42,30 @@ export function isFlag(value: unknown): value is boolean {
   return typeof value === "boolean";
 }
 
+export type SplitSide = "left" | "right";
+
+export interface SplitLayout {
+  other: string;
+  side: SplitSide;
+}
+
+export function isSplitLayout(value: unknown): value is SplitLayout | null {
+  if (value === null) return true;
+  if (typeof value !== "object" || Array.isArray(value)) return false;
+  const { other, side, ...rest } = value as Record<string, unknown>;
+  return (
+    Object.keys(rest).length === 0 &&
+    typeof other === "string" &&
+    isDocumentId(other) &&
+    (side === "left" || side === "right")
+  );
+}
+
+export function sameSplitLayout(a: SplitLayout | null, b: SplitLayout | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.other === b.other && a.side === b.side;
+}
+
 const lastDocument = createPersistedSignal<string | null>({
   key: storageKey("workspace", "last-document"),
   fallback: null,
@@ -66,7 +92,36 @@ const otherFolders = createPersistedSignal<boolean>({
   parse: isFlag,
 });
 
+const split = createPersistedSignal<SplitLayout | null>({
+  key: storageKey("workspace", "split"),
+  fallback: null,
+  parse: isSplitLayout,
+});
+
+const ratio = createPersistedSignal<number>({
+  key: storageKey("workspace", "split-ratio"),
+  fallback: SPLIT_RATIO_DEFAULT,
+  parse: isSplitRatio,
+  writeDelayMs: SPLIT_RATIO_WRITE_DELAY_MS,
+});
+
+export const splitRatio = ratio.value;
+
+export function setSplitRatio(next: number): void {
+  if (isSplitRatio(next) && ratio.peek() !== next) ratio.set(next);
+}
+
 export const lastDocumentId = lastDocument.value;
+export const splitLayout = split.value;
+
+export function peekSplitLayout(): SplitLayout | null {
+  return split.peek();
+}
+
+export function setSplitLayout(next: SplitLayout | null): void {
+  if (next && !isDocumentId(next.other)) return;
+  if (!sameSplitLayout(split.peek(), next)) split.set(next);
+}
 export const otherFoldersCollapsed = otherFolders.value;
 
 export function setOtherFoldersCollapsed(collapsed: boolean): void {
@@ -139,4 +194,6 @@ export function resetWorkspaceState(): void {
   positions.reset();
   pins.reset();
   otherFolders.reset();
+  split.reset();
+  ratio.reset();
 }

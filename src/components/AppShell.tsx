@@ -29,12 +29,14 @@ import {
 } from "~/state/library";
 import { closeSettings, startHistorySync, toggleSettings, view } from "~/state/navigation";
 import { updateStatsFromText } from "~/state/stats";
+import { closeSplit, isSplit, switchPane } from "~/state/split";
 import { applyTheme, watchSystemTheme } from "~/state/theme";
 import { displayedAppearance, displayedColors } from "~/state/theme-draft";
 import { applyFontAttribute, documentFont } from "~/state/typography";
 import {
   focusMode,
   requestEditorFocus,
+  requestPaneFocus,
   requestSearch,
   setFocusMode,
   setShortcutsOpen,
@@ -47,7 +49,7 @@ import {
 } from "~/state/ui";
 import AppSidebar from "./AppSidebar";
 import DocumentStatus from "./DocumentStatus";
-import Editor from "./Editor";
+import EditorPanes from "./EditorPanes";
 import EmptyLibrary from "./EmptyLibrary";
 import { Icon } from "./icons";
 import LibraryGate from "./LibraryGate";
@@ -69,12 +71,13 @@ function Workspace() {
         class="@container relative flex min-h-0 min-w-0 flex-1"
         aria-label="Document"
         data-layout={layoutMode()}
+        data-split={isSplit() ? "true" : undefined}
       >
         <Show when={!focusMode()}>
           <Outline />
         </Show>
         <div class="min-h-0 min-w-0 flex-1" data-testid="editor-pane">
-          <Editor mode={layoutMode()} />
+          <EditorPanes mode={layoutMode()} />
         </div>
         <Show when={!focusMode()}>
           <DocumentStatus />
@@ -146,6 +149,14 @@ export default function AppShell() {
         requestEditorFocus();
       },
       save: () => void retryLibrarySave(),
+      switchPane: () => {
+        if (view() !== "document" || !hasDocuments()) return;
+        if (switchPane()) requestPaneFocus();
+      },
+      closeSplit: () => {
+        if (view() !== "document") return;
+        if (closeSplit()) requestPaneFocus();
+      },
     };
 
     const onKeyDown = (event: KeyboardEvent) => {

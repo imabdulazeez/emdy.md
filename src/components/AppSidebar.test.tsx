@@ -12,6 +12,7 @@ import {
   documents,
   loadDocuments,
   openDocument,
+  openInSplit,
   replaceDocument,
   resetDocumentState,
   saveDocumentText,
@@ -42,6 +43,7 @@ import {
   pinnedDocumentIds,
   resetWorkspaceState,
   setOtherFoldersCollapsed,
+  splitLayout,
 } from "~/state/workspace";
 import { automaticDocumentIcon } from "~/lib/document-icon";
 import { ariaKeyShortcuts, isMacPlatform, shortcutTitle } from "~/lib/shortcuts";
@@ -699,7 +701,7 @@ describe("AppSidebar context menus", () => {
     const target = TEST_DOCUMENTS[1];
     await rightClick(user, screen.getByRole("button", { name: target.title }));
     expect(await screen.findByRole("menu", { name: target.title })).toBeInTheDocument();
-    expect(menuItems()).toEqual(["Change icon…", "Pin", "Delete…"]);
+    expect(menuItems()).toEqual(["Open in split view", "Change icon…", "Pin", "Delete…"]);
     expect(screen.getByRole("menuitem", { name: "Delete…" })).toHaveAttribute(
       "data-danger",
       "true",
@@ -752,7 +754,13 @@ describe("AppSidebar context menus", () => {
     await vi.waitFor(() => expect(button()).toHaveFocus());
 
     await rightClick(user, button());
-    expect(menuItems()).toEqual(["Change icon…", "Use automatic icon", "Pin", "Delete…"]);
+    expect(menuItems()).toEqual([
+      "Open in split view",
+      "Change icon…",
+      "Use automatic icon",
+      "Pin",
+      "Delete…",
+    ]);
     await user.click(screen.getByRole("menuitem", { name: "Use automatic icon" }));
     expect(documents().find((doc) => doc.id === target.id)?.icon).toBeNull();
     expect(button().querySelector("[data-document-icon]")).toHaveAttribute(
@@ -779,7 +787,7 @@ describe("AppSidebar context menus", () => {
     flush(() => setSidebarOpen(false));
     await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
     await screen.findByRole("menu");
-    expect(menuItems()).toEqual(["Change icon…", "Pin", "Delete…"]);
+    expect(menuItems()).toEqual(["Open in split view", "Change icon…", "Pin", "Delete…"]);
   });
 
   it("offers a new document when right-clicking the empty list area", async () => {
@@ -816,7 +824,7 @@ describe("AppSidebar context menus", () => {
     button.focus();
     await user.keyboard("{Shift>}{F10}{/Shift}");
     await vi.waitFor(() =>
-      expect(screen.getByRole("menuitem", { name: "Change icon…" })).toHaveFocus(),
+      expect(screen.getByRole("menuitem", { name: "Open in split view" })).toHaveFocus(),
     );
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();
@@ -878,9 +886,7 @@ describe("AppSidebar deletion motion", () => {
   async function confirmWithKeyboard(user: ReturnType<typeof userEvent.setup>, title: string) {
     screen.getByRole("button", { name: title }).focus();
     await user.keyboard("{Shift>}{F10}{/Shift}");
-    await vi.waitFor(() =>
-      expect(screen.getByRole("menuitem", { name: "Change icon…" })).toHaveFocus(),
-    );
+    await vi.waitFor(() => expect(screen.getAllByRole("menuitem")[0]).toHaveFocus());
     await user.keyboard("{End}{Enter}");
     await vi.waitFor(() =>
       expect(within(prompt(title)).getByRole("button", { name: "Delete" })).toHaveFocus(),
@@ -1312,7 +1318,7 @@ describe("AppSidebar opened files", () => {
     openOutside();
     mount();
     await rightClick(user, screen.getByRole("button", { name: "Outside notes" }));
-    expect(menuItems()).toEqual(["Change icon…", "Pin", "Close"]);
+    expect(menuItems()).toEqual(["Open in split view", "Change icon…", "Pin", "Close"]);
     const close = screen.getByRole("menuitem", { name: "Close" });
     expect(close).not.toHaveAttribute("data-danger");
     await user.click(close);
@@ -1334,10 +1340,22 @@ describe("AppSidebar opened files", () => {
     openOutside();
     mount();
     await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
-    expect(menuItems()).toEqual(["Change icon…", "Pin", "Reveal in File Explorer", "Delete…"]);
+    expect(menuItems()).toEqual([
+      "Open in split view",
+      "Change icon…",
+      "Pin",
+      "Reveal in File Explorer",
+      "Delete…",
+    ]);
     await user.keyboard("{Escape}");
     await rightClick(user, screen.getByRole("button", { name: "Outside notes" }));
-    expect(menuItems()).toEqual(["Change icon…", "Pin", "Reveal in File Explorer", "Close"]);
+    expect(menuItems()).toEqual([
+      "Open in split view",
+      "Change icon…",
+      "Pin",
+      "Reveal in File Explorer",
+      "Close",
+    ]);
   });
 
   it("reveals an opened file through the desktop app", async () => {
@@ -1356,5 +1374,79 @@ describe("AppSidebar opened files", () => {
     mount();
     await rightClick(user, screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
     expect(menuItems().some((label) => label?.startsWith("Reveal"))).toBe(false);
+  });
+});
+
+describe("AppSidebar split view", () => {
+  const modifier = () => (isMacPlatform() ? "Meta" : "Control");
+  const rightClick = (user: ReturnType<typeof userEvent.setup>, target: Element) =>
+    user.pointer({ keys: "[MouseRight]", target });
+
+  it("opens a document beside the active one on Cmd- or Ctrl-click", async () => {
+    const user = userEvent.setup();
+    mount();
+    const [first, second] = TEST_DOCUMENTS;
+    await user.keyboard(`{${modifier()}>}`);
+    await user.click(screen.getByRole("button", { name: second.title }));
+    await user.keyboard(`{/${modifier()}}`);
+    expect(activeDocumentId()).toBe(second.id);
+    expect(splitLayout()).toEqual({ other: first.id, side: "right" });
+    expect(editorFocusRequested()).toBe(true);
+  });
+
+  it("opens in the same pane on a plain or Shift-click", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(screen.getByRole("button", { name: TEST_DOCUMENTS[1].title }));
+    await user.keyboard("{Shift>}");
+    await user.click(screen.getByRole("button", { name: TEST_DOCUMENTS[2].title }));
+    await user.keyboard("{/Shift}");
+    expect(activeDocumentId()).toBe(TEST_DOCUMENTS[2].id);
+    expect(splitLayout()).toBeNull();
+  });
+
+  it("offers Open in split view for documents other than the active one", async () => {
+    const user = userEvent.setup();
+    mount();
+    const [first, second] = TEST_DOCUMENTS;
+    await rightClick(user, screen.getByRole("button", { name: first.title }));
+    expect(screen.queryByRole("menuitem", { name: "Open in split view" })).toBeNull();
+    await user.keyboard("{Escape}");
+    await rightClick(user, screen.getByRole("button", { name: second.title }));
+    await user.click(await screen.findByRole("menuitem", { name: "Open in split view" }));
+    expect(activeDocumentId()).toBe(second.id);
+    expect(splitLayout()).toEqual({ other: first.id, side: "right" });
+  });
+
+  it("focuses the other pane when its document is clicked", async () => {
+    const user = userEvent.setup();
+    const [first, second] = TEST_DOCUMENTS;
+    flush(() => openInSplit(second.id));
+    mount();
+    await user.click(screen.getByRole("button", { name: first.title }));
+    expect(activeDocumentId()).toBe(first.id);
+    expect(splitLayout()).toEqual({ other: second.id, side: "left" });
+    expect(editorFocusRequested()).toBe(true);
+  });
+
+  it("keeps split view out of the narrow layout", async () => {
+    window.matchMedia = (query) => {
+      const media = originalMatchMedia(query);
+      Object.defineProperty(media, "matches", { value: true });
+      return media;
+    };
+    const user = userEvent.setup();
+    flush(() => setSidebarOpen(true));
+    mount();
+    const target = TEST_DOCUMENTS[1];
+    await rightClick(user, await screen.findByRole("button", { name: target.title }));
+    await screen.findByRole("menu");
+    expect(screen.queryByRole("menuitem", { name: "Open in split view" })).toBeNull();
+    await user.keyboard("{Escape}");
+    await user.keyboard(`{${modifier()}>}`);
+    await user.click(screen.getByRole("button", { name: target.title }));
+    await user.keyboard(`{/${modifier()}}`);
+    expect(activeDocumentId()).toBe(target.id);
+    expect(splitLayout()).toBeNull();
   });
 });

@@ -8,7 +8,7 @@ import {
   openDocument,
   resetDocumentState,
 } from "./document";
-import { registerEditorApi, resetEditorApiState } from "./editor-api";
+import { registerEditorApi, registerLiveEditor, resetEditorApiState } from "./editor-api";
 import {
   documentFile,
   followLink,
@@ -142,6 +142,30 @@ describe("followRenamedFiles", () => {
       { from: 24, to: 42, insert: "Minutes.md" },
     ]);
     expect(findDocument("plan01")?.text).toBe(DOCUMENTS[1].text);
+  });
+
+  it("edits a document shown in the other pane through its own editor", () => {
+    flush(() => openDocument("plan01"));
+    const applyEdits = vi.fn<(edits: readonly TextEdit[]) => void>();
+    registerLiveEditor(
+      {
+        scrollToLine: vi.fn(),
+        focus: vi.fn(),
+        getText: () => "Typed [Meeting notes](Meeting%20notes.md)",
+        flush: vi.fn(),
+        runCommand: vi.fn(),
+        applyEdits,
+      },
+      () => "draft1",
+    );
+    entries.set("notes1", { id: "notes1", file: "Minutes.md", title: "Minutes", created: 1_000 });
+    flush(() => followRenamedFiles());
+    expect(applyEdits).toHaveBeenCalledWith([
+      { from: 7, to: 20, insert: "Minutes" },
+      { from: 22, to: 40, insert: "Minutes.md" },
+    ]);
+    expect(findDocument("draft1")?.text).toBe(DOCUMENTS[2].text);
+    expect(findDocument("plan01")?.text).toBe("See [Minutes](Minutes.md#agenda).");
   });
 
   it("leaves links inside files from other folders alone", () => {

@@ -12,11 +12,12 @@ import {
   deleteDocument,
   documents,
   findDocument,
+  saveDocumentText,
   setDocText,
   setDocumentIcon,
   setTitle,
 } from "./document";
-import { registerEditorApi, resetEditorApiState } from "./editor-api";
+import { registerEditorApi, registerLiveEditor, resetEditorApiState } from "./editor-api";
 import {
   currentLibrary,
   dismissImportStatus,
@@ -258,6 +259,33 @@ describe("library tracking", () => {
       expect(browser.files()["Welcome to emdy.md"]).toBe("# Welcome to emdy\n\nfrom editor"),
     );
     expect(editorFlush).toHaveBeenCalled();
+  });
+
+  it("flushes the other split pane's snapshot as well as the focused one", async () => {
+    const browser = await storage();
+    await startLibrary();
+    flush();
+    const win = trackingWindow();
+    track(win);
+    const background = vi.fn(() =>
+      saveDocumentText("readng", "# Reading list\n\nfrom the other pane"),
+    );
+    registerLiveEditor(
+      {
+        scrollToLine: vi.fn(),
+        focus: vi.fn(),
+        getText: () => "",
+        flush: background,
+        runCommand: vi.fn(),
+        applyEdits: vi.fn(),
+      },
+      () => "readng",
+    );
+    win.visibility("hidden");
+    await vi.waitFor(() =>
+      expect(browser.files()["Reading list.md"]).toBe("# Reading list\n\nfrom the other pane"),
+    );
+    expect(background).toHaveBeenCalled();
   });
 
   it("keeps every document removed outside the app in one refresh gone", async () => {

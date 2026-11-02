@@ -54,6 +54,8 @@ export const SHORTCUTS = [
   { id: "toggle-sidebar", keys: "Mod-\\", label: "Toggle sidebar", group: "View" },
   { id: "search", keys: "Mod-p", label: "Search documents", group: "View" },
   { id: "toggle-focus", keys: "Mod-Shift-f", label: "Toggle focus mode", group: "View" },
+  { id: "switch-pane", keys: "Mod-Alt-s", label: "Switch split pane", group: "View" },
+  { id: "close-split", keys: "Mod-Alt-Shift-s", label: "Close split view", group: "View" },
   { id: "exit-focus", keys: "Escape", label: "Exit focus mode", group: "View" },
   { id: "close-settings", keys: "Escape", label: "Close settings", group: "View" },
   { id: "context-menu", keys: "Shift-F10", label: "Open context menu", group: "View" },
@@ -182,6 +184,16 @@ export function ariaKeyShortcuts(keys: string, mac: boolean): string {
   return parts.join("+");
 }
 
+/** A click that opens in split view: Cmd-click on macOS, Ctrl-click elsewhere. */
+export function isSplitClick(
+  event: Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey" | "altKey">,
+  mac: boolean,
+): boolean {
+  const mod = mac ? event.metaKey : event.ctrlKey;
+  const other = mac ? event.ctrlKey : event.metaKey;
+  return mod && !other && !event.shiftKey && !event.altKey;
+}
+
 export interface KeyEventLike {
   key: string;
   /** Physical key, used when Option/Alt turns a letter into another character (⌥C is "ç" on a Mac). */
@@ -221,6 +233,8 @@ export interface GlobalShortcutHandlers {
   focusSearch(): void;
   createDocument(): void;
   save(): void;
+  switchPane(): void;
+  closeSplit(): void;
 }
 
 /** Shortcuts handled by the window-level capture listener in `AppShell`. */
@@ -236,6 +250,8 @@ export const GLOBAL_SHORTCUTS: readonly (readonly [
   ["save", (handlers) => handlers.save()],
   ["search", (handlers) => handlers.focusSearch()],
   ["toggle-focus", (handlers) => handlers.toggleFocusMode()],
+  ["switch-pane", (handlers) => handlers.switchPane()],
+  ["close-split", (handlers) => handlers.closeSplit()],
   ["shortcuts", (handlers) => handlers.toggleShortcuts()],
   ["settings", (handlers) => handlers.toggleSettings()],
 ];

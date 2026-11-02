@@ -23,7 +23,7 @@ import {
   replaceDocument,
   type DocumentRecord,
 } from "./document";
-import { editorApi } from "./editor-api";
+import { flushEditors } from "./editor-api";
 import { followRenamedFiles, resetLinkState, useLinkCatalog } from "./links";
 import {
   clearOpenedFileError,
@@ -136,7 +136,7 @@ export async function reopenLibrary(): Promise<void> {
 }
 
 export async function flushLibrary(): Promise<void> {
-  editorApi()?.flush();
+  flushEditors();
   flush();
   const current = library;
   if (!current) return flushOpenedFiles();

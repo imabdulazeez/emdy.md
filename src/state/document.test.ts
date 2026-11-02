@@ -17,6 +17,7 @@ import {
   loadDocuments,
   normalizeTitle,
   openDocument,
+  openInSplit,
   replaceDocument,
   resetDocumentState,
   sameListing,
@@ -38,6 +39,8 @@ import {
   rememberDocument,
   resetWorkspaceState,
   savePosition,
+  setSplitLayout,
+  splitLayout,
 } from "./workspace";
 
 beforeEach(() => resetDocumentState(TEST_DOCUMENTS));
@@ -553,6 +556,60 @@ describe("document state", () => {
       flush(clearDocumentState);
       expect(titleIsAutomatic()).toBe(false);
     });
+  });
+});
+
+describe("documents in split view", () => {
+  it("closes the split when the document in the other pane is deleted", () => {
+    const [first, second] = documents();
+    flush(() => openInSplit(second.id));
+    flush(() => deleteDocument(first.id));
+    expect(splitLayout()).toBeNull();
+    expect(activeDocumentId()).toBe(second.id);
+  });
+
+  it("hands focus to the other pane when the focused document is deleted", () => {
+    const [first, second, third] = documents();
+    flush(() => openDocument(third.id));
+    flush(() => openInSplit(first.id));
+    flush(() => deleteDocument(first.id));
+    expect(splitLayout()).toBeNull();
+    expect(activeDocumentId()).toBe(third.id);
+    expect(lastDocumentId()).toBe(third.id);
+    expect(documents().map((doc) => doc.id)).toContain(second.id);
+  });
+
+  it("keeps the split when an unrelated document is deleted", () => {
+    const [first, second, third] = documents();
+    flush(() => openInSplit(second.id));
+    flush(() => deleteDocument(third.id));
+    expect(splitLayout()).toEqual({ other: first.id, side: "right" });
+    expect(activeDocumentId()).toBe(second.id);
+  });
+
+  it("restores a saved split on load and drops one whose document is missing", () => {
+    const [first, second] = TEST_DOCUMENTS;
+    flush(() => {
+      rememberDocument(second.id);
+      setSplitLayout({ other: first.id, side: "left" });
+    });
+    flush(() => loadDocuments(TEST_DOCUMENTS));
+    expect(activeDocumentId()).toBe(second.id);
+    expect(splitLayout()).toEqual({ other: first.id, side: "left" });
+    flush(() => setSplitLayout({ other: "gone00", side: "left" }));
+    flush(() => loadDocuments(TEST_DOCUMENTS));
+    expect(splitLayout()).toBeNull();
+  });
+
+  it("drops a saved split that names the active document", () => {
+    const [first] = TEST_DOCUMENTS;
+    flush(() => {
+      rememberDocument(first.id);
+      setSplitLayout({ other: first.id, side: "right" });
+    });
+    flush(() => loadDocuments(TEST_DOCUMENTS));
+    expect(activeDocumentId()).toBe(first.id);
+    expect(splitLayout()).toBeNull();
   });
 });
 

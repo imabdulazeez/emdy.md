@@ -11,6 +11,7 @@ import {
   handleGlobalShortcut,
   isGlobalShortcutId,
   isMacPlatform,
+  isSplitClick,
   keysFor,
   matchesShortcut,
   parseShortcut,
@@ -115,6 +116,8 @@ const globalHandlers = () => ({
   focusSearch: vi.fn(),
   createDocument: vi.fn(),
   save: vi.fn(),
+  switchPane: vi.fn(),
+  closeSplit: vi.fn(),
 });
 
 describe("handleGlobalShortcut", () => {
@@ -204,6 +207,35 @@ describe("handleGlobalShortcut", () => {
     expect(h.save).toHaveBeenCalledTimes(2);
   });
 
+  it("switches and closes split panes with Mod-Alt-S and Mod-Alt-Shift-S", () => {
+    const h = handlers();
+    expect(handleGlobalShortcut(key({ key: "s", metaKey: true, altKey: true }), h, true)).toBe(
+      true,
+    );
+    expect(
+      handleGlobalShortcut(key({ key: "ß", code: "KeyS", metaKey: true, altKey: true }), h, true),
+    ).toBe(true);
+    expect(handleGlobalShortcut(key({ key: "s", ctrlKey: true, altKey: true }), h, false)).toBe(
+      true,
+    );
+    expect(
+      handleGlobalShortcut(
+        key({ key: "Í", code: "KeyS", metaKey: true, altKey: true, shiftKey: true }),
+        h,
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      handleGlobalShortcut(
+        key({ key: "S", ctrlKey: true, altKey: true, shiftKey: true }),
+        h,
+        false,
+      ),
+    ).toBe(true);
+    expect(h.switchPane).toHaveBeenCalledTimes(3);
+    expect(h.closeSplit).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores unrelated keys", () => {
     const h = handlers();
     expect(handleGlobalShortcut(key({ key: "a" }), h, true)).toBe(false);
@@ -230,6 +262,33 @@ describe("runGlobalShortcut", () => {
     expect(isGlobalShortcutId("bold")).toBe(false);
     expect(isGlobalShortcutId("nope")).toBe(false);
     expect(isGlobalShortcutId(3)).toBe(false);
+  });
+});
+
+describe("isSplitClick", () => {
+  const click = (
+    overrides: Partial<Record<"metaKey" | "ctrlKey" | "shiftKey" | "altKey", boolean>>,
+  ) => ({
+    metaKey: false,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    ...overrides,
+  });
+
+  it("opens in split view with Cmd-click on macOS and Ctrl-click elsewhere", () => {
+    expect(isSplitClick(click({ metaKey: true }), true)).toBe(true);
+    expect(isSplitClick(click({ ctrlKey: true }), false)).toBe(true);
+    expect(isSplitClick(click({ ctrlKey: true }), true)).toBe(false);
+    expect(isSplitClick(click({ metaKey: true }), false)).toBe(false);
+  });
+
+  it("ignores plain clicks and other modifier combinations", () => {
+    expect(isSplitClick(click({}), true)).toBe(false);
+    expect(isSplitClick(click({ shiftKey: true }), true)).toBe(false);
+    expect(isSplitClick(click({ metaKey: true, shiftKey: true }), true)).toBe(false);
+    expect(isSplitClick(click({ ctrlKey: true, altKey: true }), false)).toBe(false);
+    expect(isSplitClick(click({ metaKey: true, ctrlKey: true }), true)).toBe(false);
   });
 });
 
@@ -368,6 +427,8 @@ describe("SHORTCUTS bindings", () => {
     focusSearch: vi.fn(),
     createDocument: vi.fn(),
     save: vi.fn(),
+    switchPane: vi.fn(),
+    closeSplit: vi.fn(),
   });
 
   const globalIds = new Set<ShortcutId>(GLOBAL_SHORTCUTS.map(([id]) => id));

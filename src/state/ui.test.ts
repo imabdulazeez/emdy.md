@@ -7,6 +7,7 @@ import {
   resetUiState,
   requestSearch,
   requestEditorFocus,
+  requestPaneFocus,
   searchRequested,
   setFocusMode,
   setShortcutsOpen,
@@ -75,6 +76,14 @@ describe("ui state", () => {
     flush(requestEditorFocus);
     expect(layoutMode()).toBe("editor");
     expect(editorFocusRequested()).toBe(true);
+  });
+
+  it("asks the focused pane for focus without leaving the read-only preview", () => {
+    flush(() => setLayoutMode("reader"));
+    flush(requestPaneFocus);
+    expect(layoutMode()).toBe("reader");
+    expect(editorFocusRequested()).toBe(true);
+    expect(takeEditorFocusRequest()).toBe(true);
   });
 
   it("keeps an editing layout when the editor is asked for focus", () => {

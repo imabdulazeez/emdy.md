@@ -5,13 +5,21 @@ import { getFocusable } from "~/lib/focus-trap";
 import { collapseElement } from "~/lib/motion";
 import { groupByRecency, sameSections } from "~/lib/recency";
 import { normalizeQuery, searchDocuments, type SearchExcerpt } from "~/lib/search";
-import { ariaKeyShortcuts, isMacPlatform, shortcutKeys, shortcutTitle } from "~/lib/shortcuts";
+import {
+  ariaKeyShortcuts,
+  isMacPlatform,
+  isSplitClick,
+  shortcutKeys,
+  shortcutTitle,
+} from "~/lib/shortcuts";
 import {
   activeDocumentId,
   createDocument,
+  currentDocumentId,
   deleteDocument,
   documents,
   openDocument,
+  openInSplit,
   sameListing,
   setDocumentIcon,
   toListing,
@@ -22,6 +30,7 @@ import { editorApi } from "~/state/editor-api";
 import { libraryStatus } from "~/state/library";
 import { closeSettings, openSettings, view } from "~/state/navigation";
 import { isOpenedFile, openedFileIds } from "~/state/opened-files";
+import { showsInOtherPane } from "~/state/split";
 import {
   isPinned,
   otherFoldersCollapsed,
@@ -32,6 +41,7 @@ import {
 } from "~/state/workspace";
 import {
   requestEditorFocus,
+  requestPaneFocus,
   searchRequested,
   takeSearchRequest,
   toggleShortcuts,
@@ -72,7 +82,7 @@ interface DocumentItemProps {
   opened: boolean;
   /** Deletion is confirmed and the row is collapsing out of the list. */
   removing: boolean;
-  onOpen(id: string): void;
+  onOpen(id: string, split: boolean): void;
   onRequestDelete(id: string): void;
   onTogglePin(id: string, pin: boolean): void;
   onConfirmDelete(id: string, row: HTMLElement | undefined): void;
@@ -81,6 +91,7 @@ interface DocumentItemProps {
 }
 
 function DocumentItem(props: DocumentItemProps) {
+  const mac = isMacPlatform();
   let confirmButton: HTMLButtonElement | undefined;
   let row: HTMLLIElement | undefined;
   const active = () => view() === "document" && activeDocumentId() === props.doc.id;
@@ -112,7 +123,7 @@ function DocumentItem(props: DocumentItemProps) {
                 "h-9 rounded-[10px] px-3 data-[active=true]:shadow-none group-has-[[data-sidebar=menu-action]]/menu-item:pr-14",
                 props.excerpt && "h-auto min-h-9 py-1.5",
               )}
-              onClick={() => props.onOpen(props.doc.id)}
+              onClick={(event) => props.onOpen(props.doc.id, isSplitClick(event, mac))}
               onContextMenu={(event) => props.onContextMenu(event, props.doc)}
               onKeyDown={(event) => {
                 if (isContextMenuKey(event)) props.onContextMenu(event, props.doc);
@@ -282,10 +293,17 @@ export default function AppSidebar() {
     if (sidebar.isMobile()) sidebar.setOpen(false);
   };
 
-  const open = (id: string) => {
+  const open = (id: string, split = false) => {
     setPendingDelete(null);
     closeSettings();
-    if (openDocument(id)) editorApi()?.focus();
+    if (split && !sidebar.isMobile() && openInSplit(id)) requestPaneFocus();
+    else {
+      const otherPane = showsInOtherPane(id);
+      if (openDocument(id)) {
+        if (otherPane) requestPaneFocus();
+        else editorApi()?.focus();
+      }
+    }
     closeOnMobile();
   };
 
@@ -434,17 +452,23 @@ export default function AppSidebar() {
 
   const documentMenu = (event: MouseEvent | KeyboardEvent, doc: DocumentListing) => {
     const anchor = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-    const items: ContextMenuItem[] = [
-      {
-        id: "icon",
-        label: "Change icon…",
-        icon: "image",
-        onSelect: () => {
-          setPendingDelete(null);
-          setIconTarget({ id: doc.id, anchor });
-        },
+    const items: ContextMenuItem[] = [];
+    if (doc.id !== currentDocumentId() && !sidebar.isMobile())
+      items.push({
+        id: "split",
+        label: "Open in split view",
+        icon: "split",
+        onSelect: () => open(doc.id, true),
+      });
+    items.push({
+      id: "icon",
+      label: "Change icon…",
+      icon: "image",
+      onSelect: () => {
+        setPendingDelete(null);
+        setIconTarget({ id: doc.id, anchor });
       },
-    ];
+    });
     if (doc.icon)
       items.push({
         id: "reset-icon",

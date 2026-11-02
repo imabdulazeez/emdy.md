@@ -50,7 +50,7 @@ import {
   isMacPlatform,
   keysFor,
 } from "~/lib/shortcuts";
-import { resetWorkspaceState } from "~/state/workspace";
+import { resetWorkspaceState, splitLayout } from "~/state/workspace";
 
 import { getRenderClient } from "~/lib/preview/render-client";
 vi.mock("~/lib/preview/render-client", () => ({
@@ -393,6 +393,46 @@ describe("AppShell", () => {
     await user.keyboard("{Control>}\\{/Control}");
     expect(sidebarOpen()).toBe(false);
     expect(screen.queryByRole("dialog", { name: "Sidebar" })).toBeNull();
+  });
+
+  it("opens split view from the sidebar and switches and closes it from the keyboard", async () => {
+    const user = userEvent.setup();
+    await mount();
+    const [first, second] = documents();
+    const sidebar = within(screen.getByRole("list", { name: "Documents" }));
+    await user.keyboard("{Control>}");
+    await user.click(sidebar.getByRole("button", { name: second.title }));
+    await user.keyboard("{/Control}");
+    expect(splitLayout()).toEqual({ other: first.id, side: "right" });
+    const editors = await screen.findAllByRole("textbox", { name: "Markdown editor" });
+    expect(editors).toHaveLength(2);
+    expect(screen.getByRole("main", { name: "Document" })).toHaveAttribute("data-split", "true");
+    const left = screen.getByRole("region", { name: `${first.title} pane` });
+    const right = screen.getByRole("region", { name: `${second.title} pane` });
+    await waitFor(() => expect(within(right).getByRole("textbox")).toHaveFocus());
+    expect(document.title).toContain(second.title);
+
+    await user.keyboard("{Control>}{Alt>}s{/Alt}{/Control}");
+    expect(activeDocumentId()).toBe(first.id);
+    await waitFor(() => expect(within(left).getByRole("textbox")).toHaveFocus());
+    expect(left).toHaveAttribute("data-pane-active", "true");
+    expect(document.title).toContain(first.title);
+
+    await user.keyboard("{Control>}{Alt>}{Shift>}S{/Shift}{/Alt}{/Control}");
+    expect(splitLayout()).toBeNull();
+    expect(activeDocumentId()).toBe(first.id);
+    expect(screen.getAllByRole("textbox", { name: "Markdown editor" })).toHaveLength(1);
+    expect(screen.getByRole("main", { name: "Document" })).not.toHaveAttribute("data-split");
+  });
+
+  it("ignores the split shortcuts without a split", async () => {
+    const user = userEvent.setup();
+    await mount();
+    const active = activeDocumentId();
+    await user.keyboard("{Control>}{Alt>}s{/Alt}{/Control}");
+    await user.keyboard("{Control>}{Alt>}{Shift>}S{/Shift}{/Alt}{/Control}");
+    expect(activeDocumentId()).toBe(active);
+    expect(splitLayout()).toBeNull();
   });
 
   it("names the browser tab after the active document", async () => {
