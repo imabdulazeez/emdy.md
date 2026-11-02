@@ -48,6 +48,22 @@ const type = (text: string) =>
   });
 
 describe("editor session", () => {
+  it("drops a cached state when another pane saved newer text at the same revision", () => {
+    expect(session.open("b", "bravo", 0)).toBe(false);
+    expect(session.open("a", "alpha from the other pane", 0)).toBe(false);
+    expect(view.state.doc.toString()).toBe("alpha from the other pane");
+    expect(undo(view)).toBe(false);
+  });
+
+  it("keeps a cached state when the text only differs by line endings", () => {
+    type("\nline");
+    session.flush();
+    expect(session.open("b", "bravo", 0)).toBe(false);
+    expect(session.open("a", "alpha\r\nline", 0)).toBe(true);
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("alpha");
+  });
+
   it("saves a debounced snapshot for the current document", () => {
     type("!");
     expect(save).not.toHaveBeenCalled();

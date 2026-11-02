@@ -202,6 +202,37 @@ test("an edit in one pane is not lost or misplaced when focus moves before the d
   await expect(left).toContainText("Pending left.");
 });
 
+test("an edit made in a split pane is still there when another pane reopens the document", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await seedLibrary(page);
+
+  await row(page, "Welcome to emdy").click();
+  await expect(editors(page)).toContainText("Welcome to emdy");
+  await row(page, "Reading list").click();
+  await expect(editors(page)).toContainText("Reading list");
+
+  await row(page, "Welcome to emdy").click({ modifiers: ["ControlOrMeta"] });
+  const split = pane(page, "Welcome to emdy");
+  await expect(split).toBeVisible();
+  await editorIn(split).click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type(" typed in the split pane");
+
+  await page.getByRole("button", { name: "Close Welcome to emdy pane", exact: true }).click();
+  await expect(split).toHaveCount(0);
+  await row(page, "Welcome to emdy").click();
+  await expect(editors(page)).toHaveCount(1);
+  await expect(editors(page)).toContainText("typed in the split pane");
+
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.type(" and kept");
+  await expect
+    .poll(() => readLibraryFile(page, "Welcome to emdy.md"))
+    .toContain("typed in the split pane and kept");
+});
+
 test("a narrow window shows only the focused pane", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 });
   await seedLibrary(page);
