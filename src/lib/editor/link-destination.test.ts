@@ -69,4 +69,16 @@ describe("isBareUrl", () => {
     });
     expect(bare).toEqual(["https://a.example"]);
   });
+
+  it("is false for a URL nested under emphasis in link text, and true under plain emphasis", () => {
+    const doc = "[*www.a.example*](Notes.md) *www.b.example*";
+    const state = EditorState.create({ doc, extensions: createEditorExtensions() });
+    const bare: string[] = [];
+    syntaxTree(state).iterate({
+      enter: (node) => {
+        if (isBareUrl(node.node)) bare.push(state.sliceDoc(node.from, node.to));
+      },
+    });
+    expect(bare).toEqual(["www.b.example"]);
+  });
 });

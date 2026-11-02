@@ -52,7 +52,10 @@ export function linkDestination(state: EditorState, link: SyntaxNode): string {
 const URL_OWNERS = new Set(["Link", "Image", "Autolink", "LinkReference"]);
 
 export function isBareUrl(node: SyntaxNode): boolean {
-  return node.name === "URL" && !URL_OWNERS.has(node.parent?.name ?? "");
+  if (node.name !== "URL") return false;
+  for (let parent = node.parent; parent; parent = parent.parent)
+    if (URL_OWNERS.has(parent.name)) return false;
+  return true;
 }
 
 /** The target a Link, Autolink, or bare URL node points at, with `mailto:` added to a bare email and `https://` to a `www.` address. */

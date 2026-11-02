@@ -39,6 +39,12 @@ afterEach(() => {
 });
 
 describe("linkHrefAt", () => {
+  it("follows the link's target from a web address nested in its text", () => {
+    const doc = "[*www.example.com*](Notes.md)";
+    const state = EditorState.create({ doc, extensions: createEditorExtensions() });
+    expect(linkHrefAt(state, doc.indexOf("example"))).toBe("Notes.md");
+  });
+
   it("reads the destination of the link or autolink around a position", () => {
     const doc = "See [notes](Notes.md) and <https://example.com> here.";
     const { state } = mount(doc).view;
