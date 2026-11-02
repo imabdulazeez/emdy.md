@@ -12,10 +12,11 @@ import { cn } from "~/lib/utils";
 import { documents } from "~/state/document";
 import type { LayoutMode } from "~/state/layout";
 import { closePane, focusPane, isSplit, panes, type Pane, type PaneSlot } from "~/state/split";
-import { requestPaneFocus } from "~/state/ui";
+import { focusMode, requestPaneFocus } from "~/state/ui";
 import { setSplitRatio, splitRatio } from "~/state/workspace";
 import DocumentIcon from "./DocumentIcon";
 import Editor from "./Editor";
+import ExitFocusButton from "./ExitFocusButton";
 import { Icon } from "./icons";
 
 export interface EditorPanesProps {
@@ -24,7 +25,7 @@ export interface EditorPanesProps {
 
 interface EditorPaneProps {
   pane: Pane;
-  order: number;
+  position: number;
   share: number;
   split: boolean;
   mode: LayoutMode;
@@ -44,7 +45,7 @@ function EditorPane(props: EditorPaneProps) {
         props.split && "max-md:flex-1!",
         props.split && !props.pane.active && "max-md:hidden",
       )}
-      style={{ order: props.order, flex: props.split ? `${props.share} 1 0%` : undefined }}
+      style={{ order: props.position * 2, flex: props.split ? `${props.share} 1 0%` : undefined }}
       aria-label={props.split ? `${title()} pane` : undefined}
       data-pane={props.pane.slot}
       data-pane-active={props.split ? (props.pane.active ? "true" : "false") : undefined}
@@ -53,10 +54,16 @@ function EditorPane(props: EditorPaneProps) {
         <header
           class={cn(
             "relative flex h-8 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3 text-[12px] max-md:hidden",
+            focusMode() && "h-11",
+            focusMode() && "desktop-mac:h-13 desktop-mac:pt-2",
+            focusMode() &&
+              props.position === 0 &&
+              "desktop-mac:pl-[var(--traffic-light-inset,6rem)]",
             props.pane.active
               ? "text-text after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-accent"
               : "text-text-faint",
           )}
+          data-window-drag={focusMode() ? "" : undefined}
           onPointerDown={(event) => {
             if (!(event.target as Element).closest("button")) focus();
           }}
@@ -76,6 +83,10 @@ function EditorPane(props: EditorPaneProps) {
           >
             <Icon name="close" size={13} />
           </button>
+          <Show when={focusMode() && props.position === 1}>
+            <span aria-hidden="true" class="mx-0.5 h-4 w-px shrink-0 bg-border" />
+            <ExitFocusButton class="size-6 min-w-6 text-text-faint" size={14} />
+          </Show>
         </header>
       </Show>
       <div class="min-h-0 flex-1" onFocusIn={focus} onPointerDown={focus}>
@@ -168,7 +179,7 @@ export default function EditorPanes(props: EditorPanesProps) {
           {(pane) => (
             <EditorPane
               pane={pane()}
-              order={position(slot) * 2}
+              position={position(slot)}
               share={share(slot)}
               split={isSplit()}
               mode={props.mode}

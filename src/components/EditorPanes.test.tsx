@@ -16,7 +16,7 @@ import {
 import { resetEditorApiState } from "~/state/editor-api";
 import { resetFormattingState } from "~/state/formatting";
 import { resetStatsState } from "~/state/stats";
-import { resetUiState } from "~/state/ui";
+import { focusMode, resetUiState, setFocusMode } from "~/state/ui";
 import { resetViewportState } from "~/state/viewport";
 import { resetWorkspaceState, setSplitRatio, splitLayout, splitRatio } from "~/state/workspace";
 import EditorPanes from "./EditorPanes";
@@ -82,6 +82,28 @@ describe("EditorPanes", () => {
     expect(right).toHaveAttribute("data-pane-active", "true");
     expect(titleIn(right)).toHaveTextContent(second.title);
     expect(titleIn(left)).toHaveTextContent(first.title);
+  });
+
+  it("puts the exit-focus control in the right pane's header in focus mode", async () => {
+    const user = userEvent.setup();
+    flush(() => openInSplit(second.id));
+    render(() => <EditorPanes mode="editor" />);
+    const header = (title: string) => pane(title).querySelector("header")!;
+    expect(screen.queryByRole("button", { name: "Exit focus mode" })).toBeNull();
+    expect(header(first.title)).not.toHaveAttribute("data-window-drag");
+    flush(() => setFocusMode(true));
+    expect(
+      within(header(first.title)).queryByRole("button", { name: "Exit focus mode" }),
+    ).toBeNull();
+    const exit = within(header(second.title)).getByRole("button", { name: "Exit focus mode" });
+    expect(header(first.title)).toHaveAttribute("data-window-drag");
+    expect(header(second.title)).toHaveAttribute("data-window-drag");
+    expect(header(first.title).className).toContain("desktop-mac:pl-");
+    expect(header(second.title).className).not.toContain("desktop-mac:pl-");
+    await user.click(exit);
+    expect(focusMode()).toBe(false);
+    expect(screen.queryByRole("button", { name: "Exit focus mode" })).toBeNull();
+    expect(header(first.title)).not.toHaveAttribute("data-window-drag");
   });
 
   it("opens a split from a single pane and keeps that pane's editor", () => {

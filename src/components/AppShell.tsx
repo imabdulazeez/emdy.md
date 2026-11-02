@@ -6,13 +6,10 @@ import { matchesMediaQuery, MOBILE_MEDIA_QUERY } from "~/lib/media";
 import { getRenderClient } from "~/lib/preview/render-client";
 import { startPersistenceSync } from "~/lib/storage/persisted";
 import {
-  ariaKeyShortcuts,
   handleGlobalShortcut,
   isGlobalShortcutId,
   isMacPlatform,
   runGlobalShortcut,
-  shortcutKeys,
-  shortcutTitle,
   type GlobalShortcutHandlers,
 } from "~/lib/shortcuts";
 import { pageTitle } from "~/lib/title";
@@ -29,6 +26,7 @@ import {
 } from "~/state/library";
 import { closeSettings, startHistorySync, toggleSettings, view } from "~/state/navigation";
 import { updateStatsFromText } from "~/state/stats";
+import { cn } from "~/lib/utils";
 import { closeSplit, isSplit, switchPane } from "~/state/split";
 import { applyTheme, watchSystemTheme } from "~/state/theme";
 import { displayedAppearance, displayedColors } from "~/state/theme-draft";
@@ -51,7 +49,7 @@ import AppSidebar from "./AppSidebar";
 import DocumentStatus from "./DocumentStatus";
 import EditorPanes from "./EditorPanes";
 import EmptyLibrary from "./EmptyLibrary";
-import { Icon } from "./icons";
+import ExitFocusButton from "./ExitFocusButton";
 import LibraryGate from "./LibraryGate";
 import Outline from "./Outline";
 import SettingsPage from "./SettingsPage";
@@ -61,7 +59,6 @@ import StorageError from "./StorageError";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar";
 
 function Workspace() {
-  const mac = isMacPlatform();
   return (
     <>
       <Show when={!focusMode()}>
@@ -83,16 +80,7 @@ function Workspace() {
           <DocumentStatus />
         </Show>
         <Show when={focusMode()}>
-          <button
-            type="button"
-            class="icon-button absolute top-3 right-3 size-8"
-            aria-label="Exit focus mode"
-            title={shortcutTitle("Exit focus mode", shortcutKeys("exit-focus"), mac)}
-            aria-keyshortcuts={ariaKeyShortcuts(shortcutKeys("exit-focus"), mac)}
-            onClick={() => setFocusMode(false)}
-          >
-            <Icon name="minimize" size={16} />
-          </button>
+          <ExitFocusButton class={cn("absolute top-3 right-3 size-8", isSplit() && "md:hidden")} />
         </Show>
       </main>
     </>

@@ -298,3 +298,37 @@ test("the divider resizes the panes by mouse and keyboard and keeps the width af
   await page.getByRole("button", { name: "Close Welcome to emdy pane", exact: true }).click();
   await expect(divider).toHaveCount(0);
 });
+
+test("focus mode keeps the split's pane controls apart and exits from the right pane", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await seedLibrary(page);
+
+  await row(page, "Project ideas").click({ modifiers: ["ControlOrMeta"] });
+  const left = pane(page, "Welcome to emdy");
+  const right = pane(page, "Project ideas");
+  await expect(editorIn(right)).toBeFocused();
+
+  await page.keyboard.press("ControlOrMeta+Shift+KeyF");
+  const exit = page.getByRole("button", { name: "Exit focus mode", exact: true });
+  await expect(exit).toHaveCount(1);
+  await expect(right.getByRole("button", { name: "Exit focus mode", exact: true })).toBeVisible();
+  await expectSideBySide(page, left, right);
+
+  const close = (await right
+    .getByRole("button", { name: "Close Project ideas pane", exact: true })
+    .boundingBox())!;
+  const exitBox = (await exit.boundingBox())!;
+  const header = (await right.locator("header").boundingBox())!;
+  expect(close.x + close.width).toBeLessThanOrEqual(exitBox.x);
+  expect(exitBox.y).toBeGreaterThanOrEqual(header.y);
+  expect(exitBox.y + exitBox.height).toBeLessThanOrEqual(header.y + header.height);
+  const sheet = (await page.getByTestId("document-sheet").boundingBox())!;
+  expect(exitBox.x + exitBox.width).toBeLessThanOrEqual(sheet.x + sheet.width);
+
+  await exit.click();
+  await expect(exit).toHaveCount(0);
+  await expect(page.getByRole("banner", { name: "Toolbar" })).toBeVisible();
+  await expectSideBySide(page, left, right);
+});
